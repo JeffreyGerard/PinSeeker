@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Book Tee Time{% endblock %}
+{% block content %}
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <h2 class="text-center">Book a Tee Time</h2>
+            <form method="POST" action="{{ url_for('main.book_tee_time_route') }}">
+                <div class="mb-3">
+                    <label for="date" class="form-label">Date (MM-DD-YYYY)</label>
+                    <input type="text" class="form-control" id="date" name="date" placeholder="e.g., 05-25-2025" required>
+                </div>
+                <div class="mb-3">
+                    <label for="earliest_time" class="form-label">Earliest Time</label>
+                    <input type="text" class="form-control" id="earliest_time" name="earliest_time" placeholder="e.g., 6:00AM" required>
+                </div>
+                <div class="mb-3">
+                    <label for="latest_time" class="form-label">Latest Time</label>
+                    <input type="text" class="form-control" id="latest_time" name="latest_time" placeholder="e.g., 8:00AM" required>
+                </div>
+                <div class="mb-3">
+                    <label for="players" class="form-label">Number of Players</label>
+                    <select class="form-control" id="players" name="players" required>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="golf_course" class="form-label">Golf Course</label>
+                    <select class="form-control" id="golf_course" name="golf_course" required>
+                        <option value="Capital Hills">Capital Hills</option>
+                        <option value="Eagle Crest">Eagle Crest</option>
+                        <option value="Fairways of Halfmoon">Fairways of Halfmoon</option>
+                        <option value="Frear Park Municipal Golf Course">Frear Park Municipal Golf Course</option>
+                        <option value="Orchard Creek">Orchard Creek</option>
+                        <option value="Schenectady Muni Golf Course">Schenectady Muni Golf Course</option>
+                        <option value="Stadium Golf Course">Stadium Golf Course</option>
+                        <option value="Van Patten Golf Course">Van Patten Golf Course</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary w-100">Book Now</button>
+            </form>
+        </div>
+    </div>
+{% endblock %}

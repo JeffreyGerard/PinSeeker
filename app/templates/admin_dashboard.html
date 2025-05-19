@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+{% block content %}
+    <h2>Admin Dashboard</h2>
+
+    <h3>Registered Users</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Username</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Registered</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+                <tr>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.email }}</td>
+                    <td>{{ user.role }}</td>
+                    <td>{{ user.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h3>Booking Logs</h3>
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Golf Course</th>
+                <th>Date</th>
+                <th>Time Range</th>
+                <th>Players</th>
+                <th>Status</th>
+                <th>Message</th>
+                <th>Timestamp</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+                <tr>
+                    <td>{{ booking.user.username }}</td>
+                    <td>{{ booking.golf_course }}</td>
+                    <td>{{ booking.date }}</td>
+                    <td>{{ booking.earliest_time }} - {{ booking.latest_time }}</td>
+                    <td>{{ booking.players }}</td>
+                    <td>{{ booking.status }}</td>
+                    <td>{{ booking.message }}</td>
+                    <td>{{ booking.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
