@@ -1,0 +1,12 @@
+
+Django>=5.0
+celery>=5.3
+redis>=5.0
+psycopg2-binary
+selenium
+webdriver-manager
+cryptography
+python-dotenv
+gunicorn
+djangorestframework
+django-cors-headers

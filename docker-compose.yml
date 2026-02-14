@@ -1,0 +1,85 @@
+
+version: '3.8'
+
+services:
+  # 1. Database
+  db:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=pinseeker_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # 2. Redis (Message Broker)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  # 3. Selenium (Headless Browser)
+  selenium:
+    image: selenium/standalone-chrome:latest
+    ports:
+      - "4444:4444"
+    shm_size: "2gb" # Crucial for Chrome stability in Docker
+
+  # 4. Backend (API)
+  backend:
+    build: ./backend
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DB_NAME=pinseeker_db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=docker-secret-key
+      - ENCRYPTION_KEY=g1zKey123_REPLACE_WITH_REAL_KEY_GENERATED_BY_PYTHON=
+      - SELENIUM_HOST=http://selenium:4444
+
+  # 5. Worker (Task Executor)
+  worker:
+    build: ./backend
+    command: celery -A pinseeker worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+      - selenium
+    environment:
+      - DB_NAME=pinseeker_db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=docker-secret-key
+      - ENCRYPTION_KEY=g1zKey123_REPLACE_WITH_REAL_KEY_GENERATED_BY_PYTHON=
+      - SELENIUM_HOST=http://selenium:4444
+
+  # 6. Frontend (React)
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
