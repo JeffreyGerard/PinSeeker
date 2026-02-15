@@ -2,13 +2,11 @@
 from celery import shared_task
 from .models import BookingRequest, UserCredential
 from .utils import decrypt_password
-from .selenium_logic import book_via_foreup_software, book_via_foreup_new, book_cps_golf
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
+from .playwright_logic import book_via_foreup_software, book_via_foreup_new, book_cps_golf
 import traceback
-import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 @shared_task
 def execute_booking(request_id):
@@ -25,35 +23,12 @@ def execute_booking(request_id):
         email = creds.course_email
     except UserCredential.DoesNotExist:
         booking.status = 'FAILED'
-        booking.result_log = "Missing credentials"
+        booking.result_log = "Missing credentials. Please configure them in the System Database (Admin Panel)."
         booking.save()
         return
 
-    # 3. Setup Driver
-    chrome_options = Options()
-    # In Docker, we usually want these optimizations
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    
-    # Check if we are running in Docker with a remote Selenium container
-    selenium_host = os.getenv('SELENIUM_HOST')
-    
+    # 3. Execute Booking with Playwright
     try:
-        if selenium_host:
-            # Connect to the standalone chrome container
-            driver = webdriver.Remote(
-                command_executor=f'{selenium_host}/wd/hub',
-                options=chrome_options
-            )
-        else:
-            # Run locally
-            service = Service(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            
-        driver.implicitly_wait(10)
-        driver.maximize_window()
-
         booking.status = 'RUNNING'
         booking.save()
         
@@ -63,26 +38,32 @@ def execute_booking(request_id):
         
         result = ""
         
+        logger.info(f"Starting booking for {booking.id} using logic {logic}")
+
         if logic == 'foreup':
-            result = book_via_foreup_software(driver, url, xpath, booking, email, password)
+            result = book_via_foreup_software(url, xpath, booking, email, password)
         elif logic == 'foreup_new':
-            result = book_via_foreup_new(driver, url, xpath, booking, email, password)
+            result = book_via_foreup_new(url, xpath, booking, email, password)
         elif logic == 'cps':
-            result = book_cps_golf(driver, url, booking, email, password)
+            result = book_cps_golf(url, booking, email, password)
         elif logic == 'frear':
-            # Implement frear logic call
-            pass
+            # Placeholder for future logic
+            result = "Simulation: Frear Park logic not yet implemented."
+        elif logic == 'schenectady':
+            # Placeholder for future logic
+            result = "Simulation: Schenectady logic not yet implemented."
         else:
-            raise Exception("Unknown logic type")
+            result = f"Unknown logic type: {logic}"
 
         booking.status = 'SUCCESS'
         booking.result_log = result
-        
-    except Exception as e:
-        booking.status = 'FAILED'
-        booking.result_log = f"{str(e)}\n{traceback.format_exc()}"
-        
-    finally:
         booking.save()
-        if 'driver' in locals():
-            driver.quit()
+        return result
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        logger.error(f"Booking failed: {error_trace}")
+        booking.status = 'FAILED'
+        booking.result_log = f"Error: {str(e)}\n\n{error_trace}"
+        booking.save()
+        return f"Failed: {str(e)}"

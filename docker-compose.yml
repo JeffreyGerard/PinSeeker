@@ -5,6 +5,7 @@ services:
   # 1. Database
   db:
     image: postgres:15
+    restart: always
     environment:
       - POSTGRES_DB=pinseeker_db
       - POSTGRES_USER=postgres
@@ -17,19 +18,15 @@ services:
   # 2. Redis (Message Broker)
   redis:
     image: redis:7-alpine
+    restart: always
     ports:
       - "6379:6379"
 
-  # 3. Selenium (Headless Browser)
-  selenium:
-    image: selenium/standalone-chrome:latest
-    ports:
-      - "4444:4444"
-    shm_size: "2gb" # Crucial for Chrome stability in Docker
-
-  # 4. Backend (API)
+  # 3. Backend (API)
   backend:
-    build: ./backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     command: python manage.py runserver 0.0.0.0:8000
     volumes:
       - ./backend:/app
@@ -45,20 +42,22 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - SECRET_KEY=docker-secret-key
+      - SECRET_KEY=dev-secret-key-change-in-prod
+      # IMPORTANT: This key decrypts passwords in the DB. 
+      # If you rebuild the container, keep this key consistent or existing passwords break.
       - ENCRYPTION_KEY=g1zKey123_REPLACE_WITH_REAL_KEY_GENERATED_BY_PYTHON=
-      - SELENIUM_HOST=http://selenium:4444
 
-  # 5. Worker (Task Executor)
+  # 4. Worker (Task Executor)
   worker:
-    build: ./backend
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
     command: celery -A pinseeker worker --loglevel=info
     volumes:
       - ./backend:/app
     depends_on:
       - backend
       - redis
-      - selenium
     environment:
       - DB_NAME=pinseeker_db
       - DB_USER=postgres
@@ -66,13 +65,14 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - CELERY_BROKER_URL=redis://redis:6379/0
-      - SECRET_KEY=docker-secret-key
+      - SECRET_KEY=dev-secret-key-change-in-prod
       - ENCRYPTION_KEY=g1zKey123_REPLACE_WITH_REAL_KEY_GENERATED_BY_PYTHON=
-      - SELENIUM_HOST=http://selenium:4444
 
-  # 6. Frontend (React)
+  # 5. Frontend (React)
   frontend:
-    build: ./frontend
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "5173:5173"
     volumes:

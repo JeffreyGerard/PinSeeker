@@ -3,8 +3,7 @@ Django>=5.0
 celery>=5.3
 redis>=5.0
 psycopg2-binary
-selenium
-webdriver-manager
+playwright
 cryptography
 python-dotenv
 gunicorn
