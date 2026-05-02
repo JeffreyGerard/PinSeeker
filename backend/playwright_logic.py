@@ -1,5 +1,5 @@
 from playwright.sync_api import sync_playwright
-from playwright_stealth import stealth
+from playwright_stealth import stealth_sync
 from datetime import datetime
 import time
 import re
@@ -21,7 +21,7 @@ def parse_time(date_obj, time_obj):
 def _new_stealth_context(p, headless=True):
     """Launch a Chromium context with anti-bot flags."""
     browser = p.chromium.launch(
-        headless=headless,
+        headless=False,
         args=['--disable-blink-features=AutomationControlled'],
     )
     context = browser.new_context(
@@ -33,7 +33,7 @@ def _new_stealth_context(p, headless=True):
     return browser, context
 
 def apply_stealth(page):
-    stealth(page)
+    stealth_sync(page)
 
 
 def robust_click(page, selector, timeout=10000):
@@ -231,7 +231,7 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False):
     Verified flow for ForeUp /booking/<id>/<class_id>/ sites.
     """
     with sync_playwright() as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=False)
         page = context.new_page()
         apply_stealth(page)
         try:

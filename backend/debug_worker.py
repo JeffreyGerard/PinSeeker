@@ -14,11 +14,11 @@ def simulate_cloud_run_event():
     # Simulate the exact JSON payload Cloud Run receives
     json_payload = """
     {
-        "course_url": "https://foreupsoftware.com/index.php/booking/20349/5649",
+        "course_url": "https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*9imsew*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3Nzc3Mjc1NDEkbzEkZzAkdDE3Nzc3Mjc1NDEkajYwJGwwJGgw#teetimes",
         "course_name": "Orchard Creek",
-        "course_email": "YOUR_EMAIL@example.com",
-        "course_password": "YOUR_PASSWORD",
-        "desired_date": "2026-05-15",
+        "course_email": "jeff.gerard05@gmail.com",
+        "course_password": "Password101",
+        "desired_date": "2026-05-03",
         "earliest_time": "07:00:00",
         "latest_time": "11:00:00",
         "players": 4,
