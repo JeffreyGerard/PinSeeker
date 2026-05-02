@@ -2,7 +2,7 @@ import os
 import json
 import logging
 from google.cloud import run_v2
-from .utils import decrypt_password
+from utils import decrypt_password
 
 logger = logging.getLogger(__name__)
 

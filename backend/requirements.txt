@@ -9,3 +9,5 @@ django-cors-headers
 google-cloud-run>=0.10.0
 google-cloud-scheduler>=2.13.0
 requests
+playwright==1.43.0
+playwright-stealth==1.0.6

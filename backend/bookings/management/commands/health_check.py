@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from bookings.models import GolfCourse, BookingRequest, UserCredential
-from bookings.playwright_logic import (
+from playwright_logic import (
     book_via_foreup_software,
     book_cps_golf,
     book_cps_old_post,
@@ -11,7 +11,7 @@ from bookings.playwright_logic import (
     book_stadium,
     book_van_patten
 )
-from bookings.utils import decrypt_password
+from utils import decrypt_password
 from datetime import date, time, timedelta
 
 class Command(BaseCommand):

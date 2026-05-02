@@ -98,7 +98,7 @@ class UserCredentialViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         password = serializer.validated_data.pop('password', None)
         if password:
-            from .utils import encrypt_password
+            from utils import encrypt_password
             encrypted = encrypt_password(password)
             serializer.save(encrypted_password=encrypted)
         else:

@@ -2,8 +2,8 @@ import os
 from datetime import date, time, timedelta
 from django.core.management.base import BaseCommand
 from bookings.models import GolfCourse, BookingRequest, UserCredential
-from bookings.utils import decrypt_password
-from bookings.playwright_logic import (
+from utils import decrypt_password
+from playwright_logic import (
     book_via_foreup_software, 
     book_via_foreup_new, 
     book_cps_golf,

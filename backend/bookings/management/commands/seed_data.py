@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from bookings.models import GolfCourse, UserCredential
-from bookings.utils import encrypt_password
+from utils import encrypt_password
 
 class Command(BaseCommand):
     help = 'Seeds the database with initial users and golf course data'

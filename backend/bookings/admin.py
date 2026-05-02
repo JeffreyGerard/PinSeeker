@@ -4,7 +4,7 @@ from django import forms
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User
 from .models import GolfCourse, UserCredential, BookingRequest, UserProfile
-from .utils import encrypt_password
+from utils import encrypt_password
 
 # --- Inline Profile for User Admin ---
 class UserProfileInline(admin.StackedInline):
