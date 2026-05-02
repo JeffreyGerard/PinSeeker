@@ -1,0 +1,104 @@
+
+services:
+  # 1. Database
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      - POSTGRES_DB=pinseeker_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=supersecret
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+
+  # 2. Redis (Message Broker)
+  redis:
+    image: redis:7-alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # 3. Backend (API)
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DB_NAME=pinseeker_db
+      - DB_USER=postgres
+      - DB_PASSWORD=supersecret
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-prod
+      # IMPORTANT: This key decrypts passwords in the DB. 
+      # If you rebuild the container, keep this key consistent or existing passwords break.
+      - ENCRYPTION_KEY=VkRfUS9bi5MwwLELK8BW_ghdAYDj2mgYfNmXcjWCK58=
+
+  # 4. Worker (Task Executor)
+  worker:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A pinseeker worker --loglevel=info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    environment:
+      - DB_NAME=pinseeker_db
+      - DB_USER=postgres
+      - DB_PASSWORD=supersecret
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-prod
+      - ENCRYPTION_KEY=VkRfUS9bi5MwwLELK8BW_ghdAYDj2mgYfNmXcjWCK58=
+
+  # 4b. Beat (Periodic Task Scheduler)
+  beat:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A pinseeker beat --loglevel=info
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - backend
+      - redis
+    environment:
+      - DB_NAME=pinseeker_db
+      - DB_USER=postgres
+      - DB_PASSWORD=supersecret
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - SECRET_KEY=dev-secret-key-change-in-prod
+      - ENCRYPTION_KEY=VkRfUS9bi5MwwLELK8BW_ghdAYDj2mgYfNmXcjWCK58=
+
+  # 5. Frontend (React)
+  frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

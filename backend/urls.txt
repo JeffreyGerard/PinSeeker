@@ -1,0 +1,9 @@
+cps|Capital Hills|https://capitalhillsny.cps.golf/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23
+foreup_new|Fairways of Halfmoon|https://foreupsoftware.com/index.php/booking/21756#/teetimes
+frear|Frear Park Municipal Golf Course|https://secure.east.prophetservices.com/FrearParkV3/(S(13kebkre22enx3l3kh5xqh2p))/Home/nIndex?CourseId=1,2&Date=2024-6-28&Time=AnyTime&Player=4&Hole=18
+foreup|Orchard Creek|https://foreupsoftware.com/index.php/booking/19530/1791#teetimes
+cps_old_post|Old Post|https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23
+schenectady|Schenectady Muni Golf Course|https://foreupsoftware.com/index.php/booking/20480/4739#/teetimes
+foreup_new|Stadium Golf Course|https://foreupsoftware.com/index.php/booking/index/3332#/teetimes
+foreup|Van Patten Golf Course|https://foreupsoftware.com/index.php/booking/index/19324#/teetimes
+eagleclub|Eagle Crest|https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101

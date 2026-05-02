@@ -1,0 +1,14 @@
+FROM mcr.microsoft.com/playwright/python:v1.43.0-jammy
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install only the chromium browser to save space
+RUN playwright install chromium
+
+COPY . .
+
+# Run the script
+CMD ["python", "scraper_job.py"]
