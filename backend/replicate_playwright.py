@@ -10,26 +10,26 @@ import playwright_logic
 # MOCK DATA - EDIT THESE FOR YOUR TEST
 # ---------------------------------------------------------------------------
 COURSE_TO_TEST = "capital_hills"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
-TARGET_DATE = date.today() + timedelta(days=7)  # Default: 7 days from now
+TARGET_DATE = date.today() + timedelta(days=2)  # Default: 7 days from now
 EARLIEST_TIME = "07:00:00"
 LATEST_TIME = "11:00:00"
 PLAYERS = 4
-DRY_RUN = True  # Set to False to actually attempt booking
+DRY_RUN = False  # Set to False to actually attempt booking
 
 # Credentials (Use .env or hardcode for local debug only)
-EMAIL = os.environ.get("GOLF_EMAIL", "your_email@example.com")
-PASSWORD = os.environ.get("GOLF_PASSWORD", "your_password")
+EMAIL = "jeff.gerard05@gmail.com"
+PASSWORD = "Password101"
 
 # URLs for reference (copied from worker.py)
 URLS = {
-    "capital_hills": "https://cps.com/capital",
-    "old_post": "https://cps.com/post",
-    "orchard_creek": "https://foreupsoftware.com/index.php/booking/20340/3565",
-    "schenectady": "https://foreupsoftware.com/index.php/booking/19692/2163",
-    "fairways": "https://foreupsoftware.com/index.php/booking/19714/2324",
-    "stadium": "https://foreupsoftware.com/index.php/booking/19765/2544",
-    "van_patten": "https://foreupsoftware.com/index.php/booking/19765/2544",
-    "eagle_crest": "https://eaglecrest.com/book"
+    "capital_hills": "https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
+    "eagle_crest": "https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101",
+    "fairways": "https://foreupsoftware.com/index.php/booking/22948/12410#/welcome",
+    "old_post": "https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
+    "orchard_creek": "https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes",
+    "schenectady": "https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes",
+    "stadium": "https://foreupsoftware.com/index.php/booking/index/3332#teetimes",
+    "van_patten": "https://foreupsoftware.com/index.php/booking/19765/2544"
 }
 
 # ---------------------------------------------------------------------------

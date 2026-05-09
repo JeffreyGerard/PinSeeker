@@ -1,0 +1,16 @@
+{
+    "name": "Golf Bot Linux Lab",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-playwright.playwright"
+            ]
+        }
+    },
+    "postCreateCommand": "pip install -r requirements.txt && playwright install --with-deps",
+    "remoteUser": "root"
+}
