@@ -1,80 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Flag, Crosshair, LayoutDashboard, PlusCircle, Calendar, LogOut, Clock, 
-  CheckCircle2, AlertCircle, ChevronRight, Menu, X, Lock, User, Database, 
-  Terminal, Settings, Key, ShieldAlert, Trash2, XCircle, Archive
+  CheckCircle2, AlertCircle, ChevronRight, Menu, X, Lock, Terminal, Trash2, XCircle
 } from 'lucide-react';
 
 // --- API Configuration ---
-const getApiUrl = () => {
-  const host = window.location.hostname;
-  return `http://${host}:8000/api`;
-};
-const getAdminUrl = () => {
-  const host = window.location.hostname;
-  return `http://${host}:8000/admin`;
-};
+// In production (Cloud Run), the API is on the same host.
+const API_URL = '/api';
 
-const API_URL = getApiUrl();
-const ADMIN_URL = getAdminUrl();
+// --- Hardcoded Courses (Serverless Architecture) ---
+const AVAILABLE_COURSES = [
+  { id: 1, name: "Capital Hills", url: "", advance_booking_days: 10 },
+  { id: 2, name: "Old Post Road", url: "", advance_booking_days: 10 },
+  { id: 3, name: "Orchard Creek", url: "", advance_booking_days: 14 },
+  { id: 4, name: "Schenectady Muni", url: "", advance_booking_days: 7 },
+  { id: 5, name: "Fairways of Halfmoon", url: "", advance_booking_days: 14 },
+  { id: 6, name: "Stadium Golf Club", url: "", advance_booking_days: 7 },
+  { id: 7, name: "Van Patten", url: "", advance_booking_days: 7 },
+  { id: 8, name: "Eagle Crest", url: "", advance_booking_days: 14 },
+];
 
 // --- Types ---
-interface UserProfile {
-  username: string;
-  is_staff: boolean;
-  authHeader: string;
-  force_password_change: boolean;
-}
-
 interface BookingRequest {
-  id: number;
+  id: string; // Changed to string for Firestore UUIDs
   course: number;
   course_name: string;
-  username?: string;
   desired_date: string;
   earliest_time: string;
   latest_time: string;
   players: number;
-  execution_time: string;
+  release_time: string;
   status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'RUNNING' | 'CANCELLED';
   result_log?: string;
   created_at: string;
   updated_at: string;
 }
 
-interface GolfCourse {
-  id: number;
-  name: string;
-  url: string;
-  advance_booking_days: number;
-}
-
-interface UserCredential {
-  id: number;
-  course: number;
-  course_name: string;
-  course_email: string;
-}
-
 // --- Components ---
 
-const LoginScreen = ({ onLogin }: { onLogin: (u: string, p: string) => Promise<void> }) => {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+const PasscodeScreen = ({ onLogin }: { onLogin: (p: string) => void }) => {
+  const [passcode, setPasscode] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      await onLogin(username, password);
-    } catch (err) {
-      setError('Invalid credentials. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+    onLogin(passcode);
   };
 
   return (
@@ -92,50 +61,27 @@ const LoginScreen = ({ onLogin }: { onLogin: (u: string, p: string) => Promise<v
           <form onSubmit={handleSubmit} className="p-8 space-y-6">
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Username</label>
-                <div className="relative">
-                  <User className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
-                  <input 
-                    type="text" 
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-                    placeholder="Enter your username"
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Password</label>
+                <label className="block text-sm font-bold text-slate-700 mb-2">Access Passcode</label>
                 <div className="relative">
                   <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
                   <input 
                     type="password" 
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    value={passcode}
+                    onChange={(e) => setPasscode(e.target.value)}
                     className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-                    placeholder="••••••••"
+                    placeholder="Enter the secret passcode"
                     required
                   />
                 </div>
               </div>
             </div>
 
-            {error && (
-              <div className="p-4 bg-red-50 text-red-600 text-sm font-medium rounded-xl flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                {error}
-              </div>
-            )}
-
             <button 
               type="submit" 
-              disabled={loading}
-              className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
-              {!loading && <ChevronRight className="w-4 h-4" />}
+              Unlock Terminal
+              <ChevronRight className="w-4 h-4" />
             </button>
           </form>
           <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
@@ -147,229 +93,17 @@ const LoginScreen = ({ onLogin }: { onLogin: (u: string, p: string) => Promise<v
   );
 };
 
-const ChangePasswordScreen = ({ user, onSuccess }: { user: UserProfile, onSuccess: () => void }) => {
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/me/change_password/`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': user.authHeader,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ new_password: newPassword })
-      });
-      if (res.ok) {
-        onSuccess();
-      } else {
-        const data = await res.json();
-        setError(data.error || "Failed to update password.");
-      }
-    } catch (e) {
-      setError("Connection failed.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl p-8 space-y-6">
-        <div className="flex flex-col items-center text-center space-y-2">
-          <div className="w-14 h-14 bg-amber-100 rounded-full flex items-center justify-center mb-2">
-            <ShieldAlert className="w-7 h-7 text-amber-600" />
-          </div>
-          <h2 className="text-2xl font-black text-slate-900">Security Update Required</h2>
-          <p className="text-slate-500 font-medium">Please change your temporary password to continue.</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">New Password</label>
-            <input 
-              type="password" 
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-bold text-slate-700 mb-2">Confirm Password</label>
-            <input 
-              type="password" 
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none"
-              required
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-50 text-red-600 text-sm font-medium rounded-lg">{error}</div>
-          )}
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all"
-          >
-            {loading ? 'Updating...' : 'Update Password & Continue'}
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-};
-
-const CredentialManager = ({ courses, user }: { courses: GolfCourse[], user: UserProfile }) => {
-  const [credentials, setCredentials] = useState<UserCredential[]>([]);
-  const [editingCourse, setEditingCourse] = useState<number | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(true);
-
-  const fetchCredentials = async () => {
-    try {
-      const res = await fetch(`${API_URL}/credentials/`, {
-        headers: { 'Authorization': user.authHeader }
-      });
-      if (res.ok) setCredentials(await res.json());
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => { fetchCredentials(); }, []);
-
-  const handleEdit = (courseId: number, currentEmail: string = '') => {
-    setEditingCourse(courseId);
-    setEmail(currentEmail);
-    setPassword('');
-  };
-
-  const handleSave = async (courseId: number) => {
-    const existingCred = credentials.find(c => c.course === courseId);
-    const method = existingCred ? 'PUT' : 'POST';
-    const url = existingCred 
-      ? `${API_URL}/credentials/${existingCred.id}/` 
-      : `${API_URL}/credentials/`;
-
-    const body: any = { course: courseId, course_email: email };
-    if (password) body.password = password;
-
-    const res = await fetch(url, {
-      method: method,
-      headers: { 
-        'Authorization': user.authHeader,
-        'Content-Type': 'application/json' 
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (res.ok) {
-      await fetchCredentials();
-      setEditingCourse(null);
-    } else {
-      alert("Failed to save credentials.");
-    }
-  };
-
-  if (isLoading) return <div className="p-8 text-center text-slate-500">Loading settings...</div>;
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-slate-900">Course Credentials</h1>
-        <p className="text-slate-500 mt-2">Manage your login details for each golf course provider. The bot uses these to book on your behalf.</p>
-      </div>
-
-      <div className="grid gap-4">
-        {courses.map(course => {
-          const cred = credentials.find(c => c.course === course.id);
-          const isEditing = editingCourse === course.id;
-
-          return (
-            <div key={course.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:border-emerald-200">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${cred ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-400'}`}>
-                  {cred ? <CheckCircle2 className="w-6 h-6" /> : <Key className="w-6 h-6" />}
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-slate-900">{course.name}</h3>
-                  <div className="text-sm">
-                    {cred ? (
-                      <span className="text-emerald-600 font-medium">Configured as {cred.course_email}</span>
-                    ) : (
-                      <span className="text-slate-400 italic">Not configured</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {isEditing ? (
-                <div className="flex-1 max-w-lg bg-slate-50 p-4 rounded-xl border border-slate-200 animate-in fade-in slide-in-from-top-2">
-                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                      <input 
-                        type="email" placeholder="Course Username/Email"
-                        value={email} onChange={e => setEmail(e.target.value)}
-                        className="p-2 border rounded-lg text-sm"
-                      />
-                      <input 
-                        type="password" placeholder="Course Password"
-                        value={password} onChange={e => setPassword(e.target.value)}
-                        className="p-2 border rounded-lg text-sm"
-                      />
-                   </div>
-                   <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditingCourse(null)} className="px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-700">Cancel</button>
-                      <button onClick={() => handleSave(course.id)} className="px-3 py-1.5 text-xs font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Save Credentials</button>
-                   </div>
-                </div>
-              ) : (
-                <button 
-                  onClick={() => handleEdit(course.id, cred?.course_email)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-200 font-bold text-sm hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                >
-                  {cred ? 'Update Login' : 'Setup Login'}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-};
-
-const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, user, onLogout }: { 
+const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }: { 
   activeTab: string, 
   setActiveTab: (t: string) => void,
   isOpen: boolean,
   setIsOpen: (o: boolean) => void,
-  user: UserProfile,
   onLogout: () => void
 }) => {
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { id: 'new-request', icon: PlusCircle, label: 'New Request' },
-    { id: 'bookings', icon: Calendar, label: 'History' },
-    { id: 'settings', icon: Settings, label: 'Settings' },
+    { id: 'new-request', icon: PlusCircle, label: 'New Request' }
   ];
 
   const handleNav = (id: string) => {
@@ -379,7 +113,6 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, user, onLogout }:
 
   return (
     <>
-      {/* Mobile Overlay */}
       <div 
         className={`fixed inset-0 bg-slate-900/60 z-40 md:hidden backdrop-blur-sm transition-opacity duration-300 ${isOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsOpen(false)}
@@ -419,40 +152,15 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, user, onLogout }:
               <span className="font-semibold">{item.label}</span>
             </button>
           ))}
-
-          {/* Admin System Link - Only visible to staff */}
-          {user.is_staff && (
-            <div className="pt-4 mt-4 border-t border-slate-800">
-               <p className="px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">System Admin</p>
-               <a 
-                 href={ADMIN_URL}
-                 target="_blank"
-                 className="w-full flex items-center gap-3 px-4 py-4 rounded-xl transition-all duration-200 hover:bg-purple-900/30 hover:text-purple-300 text-slate-400 group"
-               >
-                  <Database className="w-5 h-5 group-hover:text-purple-400" />
-                  <span className="font-semibold">System Database</span>
-                  <ChevronRight className="w-4 h-4 ml-auto opacity-50" />
-               </a>
-            </div>
-          )}
         </nav>
 
         <div className="p-6 border-t border-slate-800 bg-slate-900/50">
-          <div className="flex items-center gap-3 mb-6">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white uppercase ${user.is_staff ? 'bg-purple-600' : 'bg-slate-700'}`}>
-              {user.username.substring(0, 2)}
-            </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-white capitalize">{user.username}</span>
-              <span className="text-xs text-slate-500">{user.is_staff ? 'System Admin' : 'Golfer'}</span>
-            </div>
-          </div>
           <button 
             onClick={onLogout}
             className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-700 hover:border-red-500/50 hover:text-red-400 transition-all text-sm font-medium"
           >
-            <LogOut className="w-4 h-4" />
-            <span>Sign Out</span>
+            <Lock className="w-4 h-4" />
+            <span>Lock Terminal</span>
           </button>
         </div>
       </aside>
@@ -489,19 +197,17 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const BookingTable = ({ bookings, user, onCancel, emptyMessage }: { bookings: BookingRequest[], user: UserProfile, onCancel?: (id: number) => void, emptyMessage: string }) => (
+const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], emptyMessage: string }) => (
   <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left border-collapse">
         <thead>
           <tr className="bg-slate-50/50 text-slate-400">
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Course</th>
-            {user.is_staff && <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">User</th>}
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Play Window</th>
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px] hidden sm:table-cell">Players</th>
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
-            <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Last Updated</th>
-            {onCancel && <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Action</th>}
+            <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Details</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -510,16 +216,6 @@ const BookingTable = ({ bookings, user, onCancel, emptyMessage }: { bookings: Bo
               <td className="px-8 py-5">
                 <span className="font-bold text-slate-900 text-base">{booking.course_name}</span>
               </td>
-              {user.is_staff && (
-                <td className="px-8 py-5">
-                  <div className="flex items-center gap-2">
-                     <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-600 uppercase">
-                      {booking.username?.substring(0, 2) || '??'}
-                     </div>
-                     <span className="text-slate-600 font-medium">{booking.username}</span>
-                  </div>
-                </td>
-              )}
               <td className="px-8 py-5">
                 <div className="flex flex-col">
                   <span className="text-slate-900 font-semibold">{new Date(booking.desired_date + 'T12:00:00').toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'})}</span>
@@ -536,27 +232,14 @@ const BookingTable = ({ bookings, user, onCancel, emptyMessage }: { bookings: Bo
               <td className="px-8 py-5">
                 <StatusBadge status={booking.status} />
               </td>
-              <td className="px-8 py-5 text-slate-400 font-mono text-xs hidden md:table-cell">
-                {new Date(booking.updated_at).toLocaleString()}
+              <td className="px-8 py-5 text-slate-500 font-medium text-xs hidden md:table-cell max-w-[200px] truncate">
+                {booking.result_log || `Releases: ${new Date(booking.release_time).toLocaleString()}`}
               </td>
-              {onCancel && (
-                <td className="px-8 py-5">
-                  {booking.status === 'PENDING' && (
-                    <button
-                      onClick={() => onCancel(booking.id)}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-600 border border-red-200 text-xs font-bold hover:bg-red-100 hover:border-red-300 transition-all active:scale-95"
-                    >
-                      <XCircle className="w-3.5 h-3.5" />
-                      Cancel
-                    </button>
-                  )}
-                </td>
-              )}
             </tr>
           ))}
           {bookings.length === 0 && (
             <tr>
-              <td colSpan={user.is_staff ? 7 : 6} className="px-8 py-16 text-center">
+              <td colSpan={5} className="px-8 py-16 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
                     <Calendar className="w-8 h-8 text-slate-200" />
@@ -572,7 +255,7 @@ const BookingTable = ({ bookings, user, onCancel, emptyMessage }: { bookings: Bo
   </div>
 );
 
-const Dashboard = ({ bookings, isLoading, user, onCancel }: { bookings: BookingRequest[], isLoading: boolean, user: UserProfile, onCancel: (id: number) => void }) => {
+const Dashboard = ({ bookings, isLoading }: { bookings: BookingRequest[], isLoading: boolean }) => {
   if (isLoading) return (
     <div className="flex flex-col items-center justify-center h-64 space-y-4">
       <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
@@ -583,18 +266,16 @@ const Dashboard = ({ bookings, isLoading, user, onCancel }: { bookings: BookingR
   const activeBookings = bookings.filter(b => b.status === 'PENDING' || b.status === 'RUNNING');
   const successCount = bookings.filter(b => b.status === 'SUCCESS').length;
   const pendingCount = activeBookings.length;
-  const nextRun = activeBookings.find(b => b.status === 'PENDING')?.execution_time || 'None';
+  // Get the most imminent pending job
+  const sortedPending = [...activeBookings].sort((a, b) => new Date(a.release_time).getTime() - new Date(b.release_time).getTime());
+  const nextRun = sortedPending[0]?.release_time || 'None';
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">
-            {user.is_staff ? 'Admin Dashboard' : 'My Dashboard'}
-          </h1>
-          <p className="text-slate-500 mt-1 font-medium">
-            {user.is_staff ? 'Overview of all system activity.' : 'Active and upcoming bookings.'}
-          </p>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Mission Control</h1>
+          <p className="text-slate-500 mt-1 font-medium">Overview of all system activity.</p>
         </div>
         <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 flex items-center gap-3">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm"></div>
@@ -609,46 +290,14 @@ const Dashboard = ({ bookings, isLoading, user, onCancel }: { bookings: BookingR
       </div>
 
       <div className="px-1 py-2">
-        <h3 className="text-xl font-bold text-slate-900 mb-4">Active Bookings</h3>
+        <h3 className="text-xl font-bold text-slate-900 mb-4">Active & Recent Jobs</h3>
       </div>
-      <BookingTable bookings={activeBookings} user={user} onCancel={onCancel} emptyMessage="No active bookings. Deploy a seeker!" />
+      <BookingTable bookings={bookings} emptyMessage="No active bookings. Deploy a seeker!" />
     </div>
   );
 };
 
-const History = ({ bookings, isLoading, user, onClearHistory }: { bookings: BookingRequest[], isLoading: boolean, user: UserProfile, onClearHistory: () => void }) => {
-  if (isLoading) return (
-    <div className="flex flex-col items-center justify-center h-64 space-y-4">
-      <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-      <p className="text-slate-500 font-medium animate-pulse">Loading history...</p>
-    </div>
-  );
-
-  const historyBookings = bookings.filter(b => b.status === 'SUCCESS' || b.status === 'FAILED' || b.status === 'CANCELLED');
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="text-4xl font-black text-slate-900 tracking-tight">Booking History</h1>
-          <p className="text-slate-500 mt-1 font-medium">Past booking results and completed jobs.</p>
-        </div>
-        {historyBookings.length > 0 && (
-          <button
-            onClick={onClearHistory}
-            className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-red-50 text-red-600 border border-red-200 font-bold text-sm hover:bg-red-100 hover:border-red-300 transition-all active:scale-95"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear History
-          </button>
-        )}
-      </div>
-      <BookingTable bookings={historyBookings} user={user} emptyMessage="No history yet. All clear!" />
-    </div>
-  );
-};
-
-const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit: (data: any) => void }) => {
+const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
   const [formData, setFormData] = useState({
     course: '',
     desired_date: '',
@@ -656,15 +305,27 @@ const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit
     latest_time: '11:00',
     players: '4',
     executionDate: '',
-    executionTime: '08:00:05',
+    executionTime: '07:00:00',
+    course_email: '',
+    course_password: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    const execution_time = `${formData.executionDate}T${formData.executionTime}`;
-    await onSubmit({ ...formData, execution_time });
+    // Combine date and time for Firestore
+    const release_time = new Date(`${formData.executionDate}T${formData.executionTime}`).toISOString();
+    
+    // Find course name from ID
+    const courseObj = AVAILABLE_COURSES.find(c => c.id === Number(formData.course));
+
+    await onSubmit({ 
+      ...formData, 
+      course: Number(formData.course),
+      course_name: courseObj?.name || 'Unknown Course',
+      release_time 
+    });
     setIsSubmitting(false);
   };
 
@@ -684,13 +345,7 @@ const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {courses.length === 0 && (
-              <div className="col-span-full bg-red-50 border border-red-100 p-6 rounded-2xl text-red-600 text-sm flex items-center gap-3 font-medium">
-                <AlertCircle className="w-6 h-6" />
-                <span>No courses configured. Use the Admin panel to add your golf clubs.</span>
-              </div>
-            )}
-            {courses.map((course) => (
+            {AVAILABLE_COURSES.map((course) => (
               <label 
                 key={course.id} 
                 className={`relative group flex items-center p-5 border-2 rounded-2xl cursor-pointer transition-all duration-300 ${
@@ -733,7 +388,7 @@ const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit
             
             <div className="space-y-4">
               {(() => {
-                const selectedCourse = courses.find(c => c.id === Number(formData.course));
+                const selectedCourse = AVAILABLE_COURSES.find(c => c.id === Number(formData.course));
                 const today = new Date().toISOString().split('T')[0];
                 const maxDate = selectedCourse?.advance_booking_days
                   ? new Date(Date.now() + selectedCourse.advance_booking_days * 86400000).toISOString().split('T')[0]
@@ -806,13 +461,30 @@ const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit
                 <h2 className="text-lg font-bold">Execution Plan</h2>
               </div>
               
-              <div className="bg-slate-800/50 p-5 rounded-2xl border border-white/5 mb-8">
-                <p className="text-sm text-slate-400 leading-relaxed font-medium">
-                  Set the exact moment the course opens its bookings (e.g., 7:00 AM sharp 10 days out). The seeker will execute precisely at this time.
-                </p>
-              </div>
-
               <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Course Email</label>
+                    <input 
+                      type="email" placeholder="Required for login"
+                      className="w-full h-12 rounded-xl bg-slate-800 border-transparent focus:border-emerald-500 border-2 px-4 text-sm font-medium text-white transition-all outline-none"
+                      value={formData.course_email}
+                      onChange={(e) => setFormData({...formData, course_email: e.target.value})}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Course Password</label>
+                    <input 
+                      type="password" placeholder="••••••••"
+                      className="w-full h-12 rounded-xl bg-slate-800 border-transparent focus:border-emerald-500 border-2 px-4 text-sm font-medium text-white transition-all outline-none"
+                      value={formData.course_password}
+                      onChange={(e) => setFormData({...formData, course_password: e.target.value})}
+                      required
+                    />
+                  </div>
+                </div>
+
                 <div>
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Execution Day</label>
                   <input 
@@ -853,25 +525,19 @@ const NewRequestForm = ({ courses, onSubmit }: { courses: GolfCourse[], onSubmit
 };
 
 const App = () => {
-  const [user, setUser] = useState<UserProfile | null>(null);
+  const [passcode, setPasscode] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [bookings, setBookings] = useState<BookingRequest[]>([]);
-  const [courses, setCourses] = useState<GolfCourse[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const fetchData = async () => {
-    if (!user) return;
-    
+    if (!passcode) return;
+    setLoading(true);
     try {
-      const headers = { 'Authorization': user.authHeader, 'Content-Type': 'application/json' };
-      const [bookingsRes, coursesRes] = await Promise.all([
-        fetch(`${API_URL}/requests/`, { headers }),
-        fetch(`${API_URL}/courses/`, { headers })
-      ]);
-      if (bookingsRes.ok && coursesRes.ok) {
-        setBookings(await bookingsRes.json());
-        setCourses(await coursesRes.json());
+      const res = await fetch(`${API_URL}/bookings?passcode=${passcode}`);
+      if (res.ok) {
+        setBookings(await res.json());
       }
     } catch (err) {
       console.warn("Retrying connection to API...");
@@ -881,101 +547,47 @@ const App = () => {
   };
 
   useEffect(() => {
-    if (user && !user.force_password_change) {
+    if (passcode) {
       fetchData();
-      const interval = setInterval(fetchData, 8000);
+      const interval = setInterval(fetchData, 10000); // Polling every 10 seconds
       return () => clearInterval(interval);
     }
-  }, [user]);
+  }, [passcode]);
 
-  const handleLogin = async (u: string, p: string) => {
-    const authHeader = 'Basic ' + btoa(`${u}:${p}`);
-    const res = await fetch(`${API_URL}/me/`, {
-      headers: { 'Authorization': authHeader }
-    });
-    
-    if (res.ok) {
-      const data = await res.json();
-      setUser({
-        username: data.username,
-        is_staff: data.is_staff,
-        force_password_change: data.force_password_change,
-        authHeader: authHeader
-      });
-      setLoading(true);
-    } else {
-      throw new Error('Invalid credentials');
-    }
+  const handleLogin = (code: string) => {
+    setPasscode(code);
   };
 
   const handleLogout = () => {
-    setUser(null);
+    setPasscode(null);
     setBookings([]);
-    setCourses([]);
     setActiveTab('dashboard');
   };
 
   const handleNewBooking = async (data: any) => {
-    if (!user) return;
+    if (!passcode) return;
     try {
-      const res = await fetch(`${API_URL}/requests/`, {
+      const payload = { ...data, passcode };
+      const res = await fetch(`${API_URL}/bookings`, {
         method: 'POST',
-        headers: { 'Authorization': user.authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
-        await fetchData();
+        alert("Bot Armed! Job sent to Firestore.");
+        fetchData();
         setActiveTab('dashboard');
       } else {
-        alert("Configuration error. Please verify your execution time.");
+        const errorData = await res.json();
+        alert(`Failed: ${errorData.detail || "Invalid Passcode"}`);
       }
     } catch (e) {
       alert("Lost connection to server.");
     }
   };
 
-  const handleCancelBooking = async (bookingId: number) => {
-    if (!user) return;
-    try {
-      const res = await fetch(`${API_URL}/requests/${bookingId}/cancel/`, {
-        method: 'POST',
-        headers: { 'Authorization': user.authHeader, 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        await fetchData();
-      } else {
-        const data = await res.json();
-        alert(data.error || 'Failed to cancel booking.');
-      }
-    } catch (e) {
-      alert('Lost connection to server.');
-    }
-  };
-
-  const handleClearHistory = async () => {
-    if (!user) return;
-    if (!confirm('Are you sure you want to clear all completed, failed, and cancelled bookings from history? This cannot be undone.')) return;
-    try {
-      const res = await fetch(`${API_URL}/requests/clear_history/`, {
-        method: 'POST',
-        headers: { 'Authorization': user.authHeader, 'Content-Type': 'application/json' },
-      });
-      if (res.ok) {
-        await fetchData();
-      } else {
-        alert('Failed to clear history.');
-      }
-    } catch (e) {
-      alert('Lost connection to server.');
-    }
-  };
-
-  if (!user) {
-    return <LoginScreen onLogin={handleLogin} />;
-  }
-
-  if (user.force_password_change) {
-    return <ChangePasswordScreen user={user} onSuccess={() => setUser({ ...user, force_password_change: false })} />;
+  if (!passcode) {
+    return <PasscodeScreen onLogin={handleLogin} />;
   }
 
   return (
@@ -985,7 +597,6 @@ const App = () => {
         setActiveTab={setActiveTab} 
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
-        user={user}
         onLogout={handleLogout}
       />
       
@@ -1006,10 +617,8 @@ const App = () => {
         </header>
 
         <div className="p-6 md:p-12">
-          {activeTab === 'dashboard' && <Dashboard bookings={bookings} isLoading={loading} user={user} onCancel={handleCancelBooking} />}
-          {activeTab === 'new-request' && <NewRequestForm courses={courses} onSubmit={handleNewBooking} />}
-          {activeTab === 'bookings' && <History bookings={bookings} isLoading={loading} user={user} onClearHistory={handleClearHistory} />}
-          {activeTab === 'settings' && <CredentialManager courses={courses} user={user} />}
+          {activeTab === 'dashboard' && <Dashboard bookings={bookings} isLoading={loading} />}
+          {activeTab === 'new-request' && <NewRequestForm onSubmit={handleNewBooking} />}
         </div>
       </main>
     </div>

@@ -30,3 +30,4 @@ env/
 *.njsproj
 *.sln
 *.sw?
+*service-account.json

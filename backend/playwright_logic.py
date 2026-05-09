@@ -4,11 +4,7 @@ from datetime import datetime
 import time
 import re
 
-USER_AGENT = (
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-    'AppleWebKit/537.36 (KHTML, like Gecko) '
-    'Chrome/124.0.0.0 Safari/537.36'
-)
+USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -18,10 +14,10 @@ def parse_time(date_obj, time_obj):
     return datetime.combine(date_obj, time_obj)
 
 
-def _new_stealth_context(p, headless=True):
+def _new_stealth_context(p, headless=False):
     """Launch a Chromium context with anti-bot flags."""
     browser = p.chromium.launch(
-        headless=False,
+        headless=headless,
         args=['--disable-blink-features=AutomationControlled'],
     )
     context = browser.new_context(
@@ -29,7 +25,6 @@ def _new_stealth_context(p, headless=True):
         viewport={'width': 1920, 'height': 1080},
         timezone_id='America/New_York'
     )
-    # The AntiGravity agent left a manual evasion script; stealth_sync is much stronger.
     return browser, context
 
 def apply_stealth(page):
@@ -69,7 +64,7 @@ def book_cps_golf(url, booking, email, password, dry_run=False):
     - Must expand 'Show more Mid Day / Late Day tee times' sections.
     """
     with sync_playwright() as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=False)
         page = context.new_page()
         apply_stealth(page)
         page.goto(url)
@@ -361,7 +356,7 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False):
                         print(f"DEBUG: Clicking Log In button in frame {f.url}")
                         f.locator('button').filter(has_text=re.compile(r'Log In|Login', re.I)).first.click(force=True)
                         time.sleep(5)
-                        page.screenshot(path='/app/screenshots/after_login_click.png', full_page=True)
+                        page.screenshot(path='screenshots/after_login_click.png', full_page=True)
                         # After login, the page might redirect or refresh. 
                         # We should return and let the main loop re-scan all frames.
                         return "RETRY"
@@ -407,13 +402,13 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False):
                 time.sleep(2)
             
             time.sleep(10)
-            page.screenshot(path='/app/screenshots/final_attempt.png', full_page=True)
+            page.screenshot(path='screenshots/final_attempt.png', full_page=True)
             browser.close()
             return f'Success! Attempted booking for {best_time_str}'
 
         except Exception as e:
             print(f"DEBUG: Error in booking flow: {e}")
-            page.screenshot(path='/app/screenshots/error.png', full_page=True)
+            page.screenshot(path='screenshots/error.png', full_page=True)
             browser.close()
             raise e
 
@@ -452,7 +447,7 @@ def book_van_patten(url, booking, email, password, dry_run=False):
 
 def book_via_eagleclub(url, booking, email, password, card_number=None, card_exp_month=None, card_exp_year=None, card_cvv=None, dry_run=False):
     with sync_playwright() as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=False)
         page = context.new_page()
         apply_stealth(page)
         page.goto(url)
