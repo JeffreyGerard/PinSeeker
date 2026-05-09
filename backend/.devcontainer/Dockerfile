@@ -1,5 +1,5 @@
 # Use the official Playwright Linux image
-FROM mcr.microsoft.com/playwright/python:v1.44.0-jammy
+FROM mcr.microsoft.com/playwright/python:v1.59.0-jammy
 
 # Install Xvfb (Virtual Display) so we can run "headed" code in Linux
 RUN apt-get update && apt-get install -y xvfb

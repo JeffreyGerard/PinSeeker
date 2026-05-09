@@ -12,7 +12,8 @@ TARGET_DATE = date.today() + timedelta(days=2)
 EARLIEST_TIME = "07:00:00"
 LATEST_TIME = "11:00:00"
 PLAYERS = 4
-DRY_RUN = True  # Set to False to actually attempt booking
+DRY_RUN = False  # Set to False to actually attempt booking
+HEADLESS = False  # Set to True for hidden browser, False to see what is happening
 
 # Credentials (Use .env or hardcode for local debug only)
 # IMPORTANT: For local debugging only. Do not commit credentials.
@@ -78,6 +79,7 @@ def run_replication():
     print(f"Window:   {EARLIEST_TIME} - {LATEST_TIME}")
     print(f"Players:  {PLAYERS}")
     print(f"Dry Run:  {DRY_RUN}")
+    print(f"Headless: {HEADLESS}")
     print(f"-----------------------\n")
 
     booking = MockBooking(TARGET_DATE, EARLIEST_TIME, LATEST_TIME, PLAYERS)
@@ -91,7 +93,7 @@ def run_replication():
     book_func = handler["func"]
 
     try:
-        result = book_func(url, booking, EMAIL, PASSWORD, dry_run=DRY_RUN)
+        result = book_func(url, booking, EMAIL, PASSWORD, dry_run=DRY_RUN, headless=HEADLESS)
         print(f"[SUCCESS] Result: {result}")
 
     except Exception:

@@ -38,10 +38,10 @@ def _new_stealth_context(p, headless=True):
 # CPS Golf (Capital Hills / Old Post Road)
 # ---------------------------------------------------------------------------
 
-def book_cps_golf(url, booking, email, password, dry_run=False):
+def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
     """Verified flow for CPS Golf sites."""
     with Stealth().use_sync(sync_playwright()) as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=headless)
         page = context.new_page()
         try:
             logging.info("Navigating to CPS Golf URL: %s", url)
@@ -156,17 +156,17 @@ def book_cps_golf(url, booking, email, password, dry_run=False):
         finally:
             browser.close()
 
-def book_cps_old_post(url, booking, email, password, dry_run=False):
-    return book_cps_golf(url, booking, email, password, dry_run=dry_run)
+def book_cps_old_post(url, booking, email, password, dry_run=False, headless=True):
+    return book_cps_golf(url, booking, email, password, dry_run=dry_run, headless=headless)
 
 # ---------------------------------------------------------------------------
 # ForeUp
 # ---------------------------------------------------------------------------
 
-def book_via_foreup_software(url, booking, email, password, dry_run=False):
+def book_via_foreup_software(url, booking, email, password, dry_run=False, headless=True):
     """Verified flow for ForeUp sites."""
     with Stealth().use_sync(sync_playwright()) as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=headless)
         page = context.new_page()
         try:
             logging.info("Navigating to ForeUp URL: %s", url)
@@ -288,7 +288,7 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False):
             browser.close()
 
 
-def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_run=False):
+def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_run=False, headless=True):
     # Inject bc param into hash
     if '#' in url:
         base, fragment = url.split('#', 1)
@@ -296,33 +296,33 @@ def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_r
         url = f"{base}#{fragment}{sep}bc={booking_class_id}"
     else:
         url = f"{url}#/teetimes?bc={booking_class_id}"
-    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run)
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
 
 # Convenience wrappers
-def book_orchard_creek(url, booking, email, password, dry_run=False):
-    return book_via_foreup_software(url, booking, email, password, dry_run)
+def book_orchard_creek(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
-def book_schenectady_muni(url, booking, email, password, dry_run=False):
-    return book_via_foreup_software(url, booking, email, password, dry_run)
+def book_schenectady_muni(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
-def book_fairways_halfmoon(url, booking, email, password, dry_run=False):
-    return book_via_foreup_software(url, booking, email, password, dry_run)
+def book_fairways_halfmoon(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
-def book_stadium(url, booking, email, password, dry_run=False):
-    return book_via_foreup_index(url, booking_class_id=14558, booking=booking, email=email, password=password, dry_run=dry_run)
+def book_stadium(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_index(url, booking_class_id=14558, booking=booking, email=email, password=password, dry_run=dry_run, headless=headless)
 
-def book_van_patten(url, booking, email, password, dry_run=False):
-    return book_via_foreup_index(url, booking_class_id=None, booking=booking, email=email, password=password, dry_run=dry_run)
+def book_van_patten(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_index(url, booking_class_id=None, booking=booking, email=email, password=password, dry_run=dry_run, headless=headless)
 
 # ---------------------------------------------------------------------------
 # Eagle Crest (Eagle Club Systems)
 # ---------------------------------------------------------------------------
 
-def book_via_eagleclub(url, booking, email, password, card_number=None, card_exp_month=None, card_exp_year=None, card_cvv=None, dry_run=False):
+def book_via_eagleclub(url, booking, email, password, card_number=None, card_exp_month=None, card_exp_year=None, card_cvv=None, dry_run=False, headless=True):
     """Books a tee time through Eagle Club Systems."""
     with Stealth().use_sync(sync_playwright()) as p:
-        browser, context = _new_stealth_context(p, headless=True)
+        browser, context = _new_stealth_context(p, headless=headless)
         page = context.new_page()
         try:
             logging.info("Navigating to Eagle Club URL: %s", url)
