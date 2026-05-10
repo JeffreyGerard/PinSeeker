@@ -248,45 +248,68 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             logging.info("Clicking tee time slot for %s", best_time_str)
             booking_element.click()
 
-            # Wait for modal to appear, which could contain login or booking options
-            modal_locator = page.locator('div.modal-body, div.booking-details, #booking-modal, .modal-dialog').first
+            # Wait for modal or panel to appear
+            modal_locator = page.locator('div.modal-body, div.booking-details, #booking-modal, .modal-dialog, .booking-modal').first
             modal_locator.wait_for(state='visible', timeout=15000)
 
             # --- Handle Login (if necessary) ---
             try:
-                password_input = modal_locator.locator('input[type="password"]').first
-                if password_input.is_visible():
-                    logging.info("Login form detected in modal. Logging in.")
-                    modal_locator.locator('input[type="email"], input[name="email"]').first.fill(email)
-                    password_input.fill(password)
-                    modal_locator.locator('button:has-text("Log In"), button:has-text("Login")').first.click()
-                    # Wait for login to complete by observing the password field disappearing
-                    password_input.wait_for(state='hidden', timeout=15000)
-            except PlaywrightTimeoutError:
-                logging.info("No login form detected in modal or it disappeared, continuing.")
+                # Use global page selectors for login to be safe
+                email_input = page.get_by_placeholder("Email").first
+                pass_input = page.get_by_placeholder("Password").first
+                
+                if email_input.is_visible(timeout=5000):
+                    logging.info("Login form detected. Logging in...")
+                    email_input.fill(email)
+                    pass_input.fill(password)
+                    pass_input.press("Enter")
+                    
+                    # Wait for login to complete
+                    email_input.wait_for(state='hidden', timeout=15000)
+                    logging.info("Login successful, waiting for booking options...")
+                    page.wait_for_timeout(4000) # Give UI time to load options
+            except Exception as e:
+                logging.info(f"No login required or login transition handled: {e}")
+
+            # --- Select Booking Options ---
+            # Search globally on the page as the modal might have refreshed
+            logging.info("Selecting booking options (Holes, Players, Cart).")
+            try:
+                # Use codegen-style label selectors globally
+                page.get_by_label(re.compile(r"18 Holes", re.I)).click(timeout=5000)
+                page.wait_for_timeout(500)
+                page.get_by_label(re.compile(rf"{booking.players} Players", re.I)).click(timeout=5000)
+                page.wait_for_timeout(500)
+                
+                # Optional cart selection
+                cart_opt = page.get_by_label(re.compile(r"Yes.*cart", re.I))
+                if cart_opt.is_visible(timeout=2000):
+                    cart_opt.click()
+            except Exception as e:
+                logging.warning(f"Could not select some options (may have used defaults): {e}")
 
             # --- Final Booking Confirmation ---
             logging.info("Looking for final booking confirmation button.")
-            book_btn = modal_locator.locator('button, a').filter(
-                has_text=re.compile(r'Book Time|Reserve|Continue|Confirm', re.I)
-            ).first
+            # Search globally for the button
+            book_btn = page.get_by_role("button", name=re.compile(r"Book Time", re.I))
+            
+            # If role check fails, try text-based locator
+            if not book_btn.is_visible(timeout=5000):
+                book_btn = page.locator('button, a').filter(
+                    has_text=re.compile(r'Book Time|Reserve|Continue|Confirm', re.I)
+                ).first
+            
             book_btn.wait_for(state='visible', timeout=10000)
+            logging.info("Clicking final booking button: %s", book_btn.inner_text().strip())
             
-            logging.info("Clicking final booking button: %s", book_btn.inner_text())
-            book_btn.click()
-            
-            # Wait for a success confirmation or modal to close
-            page.wait_for_timeout(5000) 
+            if not dry_run:
+                book_btn.click()
+                # Wait for final success message
+                page.wait_for_timeout(5000) 
+            else:
+                logging.info("DRY RUN: Skipping final click.")
             
             return f'Success! Attempted booking for {best_time_str}'
-
-            # ------- GEMINI CODE BLOCK THAT DOES NOT WORK --------------#
-            #logging.info("Looking for final booking confirmation button.")
-            #book_btn = modal_locator.locator('button, a').filter(
-                #has_text=re.compile(r'Book Time|Reserve|Continue|Confirm', re.I)
-            #).first
-            #book_btn.wait_for(state='visible', timeout=10000)
-            # ------- GEMINI CODE BLOCK THAT DOES NOT WORK --------------#
 
             
 
