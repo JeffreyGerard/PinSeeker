@@ -265,33 +265,19 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             except PlaywrightTimeoutError:
                 logging.info("No login form detected in modal or it disappeared, continuing.")
 
-            # --- Final Booking Confirmation ---            
-            # 18 holes
-            logging.info("Looking for 18 holes button")
-            holes_button = page.get_by_label("18 holes")
-            holes_button.wait_for(state='visible', timeout=10000)
-            holes_button.click()
-
-            # Number of players
-            logging.info("Looking for players button")
-            players_button = page.get_by_label("4 players")
-            players_button.wait_for(state='visible', timeout=10000)
-            players_button.click()
-
-            # Cart y/n
-            logging.info("Looking for cart button")
-            cart_button = page.get_by_label(f"Yes, I need a cart")
-            cart_button.wait_for(state='visible', timeout=10000)
-            cart_button.click()
-
-            # Book time
-            logging.info("Looking for cart button")
-            book_button = page.get_by_role('button', name='Book Time')
-            book_button.wait_for(state='visible', timeout=10000)
-            logging.info("Clicking final booking button: %s", book_button.inner_text())
-            book_button.click()                        
+            # --- Final Booking Confirmation ---
+            logging.info("Looking for final booking confirmation button.")
+            book_btn = modal_locator.locator('button, a').filter(
+                has_text=re.compile(r'Book Time|Reserve|Continue|Confirm', re.I)
+            ).first
+            book_btn.wait_for(state='visible', timeout=10000)
+            
+            logging.info("Clicking final booking button: %s", book_btn.inner_text())
+            book_btn.click()
+            
             # Wait for a success confirmation or modal to close
             page.wait_for_timeout(5000) 
+            
             return f'Success! Attempted booking for {best_time_str}'
 
             # ------- GEMINI CODE BLOCK THAT DOES NOT WORK --------------#
@@ -327,7 +313,7 @@ def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_r
 def book_orchard_creek(url, booking, email, password, dry_run=False, headless=True):
     return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
-def book_schenectady_muni(url, booking, email, password, dry_run=False, headless=True,):
+def book_schenectady_muni(url, booking, email, password, dry_run=False, headless=True):
     return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
 def book_fairways_halfmoon(url, booking, email, password, dry_run=False, headless=True):
