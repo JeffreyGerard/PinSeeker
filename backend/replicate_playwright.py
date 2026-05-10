@@ -9,7 +9,7 @@ import playwright_logic
 # ---------------------------------------------------------------------------
 # MOCK DATA - EDIT THESE FOR YOUR TEST
 # ---------------------------------------------------------------------------
-COURSE_TO_TEST = "capital_hills"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
+COURSE_TO_TEST = "orchard_creek"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
 TARGET_DATE = date.today() + timedelta(days=2)  # Default: 7 days from now
 EARLIEST_TIME = "07:00:00"
 LATEST_TIME = "11:00:00"
