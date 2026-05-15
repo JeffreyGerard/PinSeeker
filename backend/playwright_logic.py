@@ -25,7 +25,7 @@ def _new_stealth_context(p, headless=True):
     """Launch a Chromium context with anti-bot flags."""
     browser = p.chromium.launch(
         headless=headless,
-        args=['--disable-blink-features=AutomationControlled'],
+        args=['--disable-blink-features=AutomationControlled', '--disable-gpu', '--no-sandbox'],
     )
     context = browser.new_context(
         user_agent=USER_AGENT,
@@ -53,65 +53,100 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
 
             email_field = page.get_by_role('textbox', name='Email', exact=True)
             email_field.wait_for(state='visible', timeout=10000)
-            email_field.type(email, delay=60)
-            page.keyboard.press('Tab')
-
+            email_field.fill(email)
             page.get_by_role('button', name='NEXT').click()
 
             pass_field = page.get_by_role('textbox', name='Password', exact=True)
             pass_field.wait_for(state='visible', timeout=10000)
-            pass_field.type(password, delay=60)
-            page.keyboard.press('Tab')
-            
+            pass_field.fill(password)
             page.get_by_role('button', name='SIGN IN', exact=True).click()
-            logging.info("Sign-in button clicked. Waiting for navigation.")
-            page.wait_for_load_state('networkidle', timeout=30000)
+            
+            logging.info("Sign-in button clicked. Waiting for dashboard to load.")
+            # Wait for any of these to confirm the dashboard is live
+            try:
+                page.locator('mat-calendar, .booking-container, .tee-sheet-container, .course-name, mat-month-view').first.wait_for(state='visible', timeout=25000)
+                logging.info("Dashboard detected.")
+            except PlaywrightTimeoutError:
+                logging.warning("Dashboard container not detected via locator, falling back to networkidle.")
+                page.wait_for_load_state('networkidle', timeout=15000)
+            
+            # Additional settling time for headless
+            page.wait_for_timeout(3000)
 
-            # --- Navigate date with arrow buttons ---
+            # --- Navigate date ---
             logging.info("Navigating to target date: %s", booking.desired_date)
-            today = datetime.today().date()
-            delta = (booking.desired_date - today).days
+            
+            day_str = str(booking.desired_date.day)
+            try:
+                # Target the specific Material calendar cell to avoid random matches
+                day_button = page.locator('mat-month-view .mat-calendar-body-cell-content').filter(has_text=re.compile(rf'^{day_str}$')).first
+                if not day_button.is_visible():
+                     day_button = page.get_by_text(day_str, exact=True).first
+                
+                day_button.wait_for(state='visible', timeout=10000)
+                day_button.click(force=True)
+                logging.info(f"Clicked day {day_str} directly.")
+                page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception as e:
+                logging.info(f"Could not click day {day_str} directly ({e}), attempting arrow navigation.")
+                today = datetime.today().date()
+                delta = (booking.desired_date - today).days
+                if delta != 0:
+                    arrow_selector = "button:has(mat-icon:text('navigate_next')), .mat-calendar-next-button"
+                    for i in range(abs(delta)):
+                        btn = page.locator(arrow_selector).first
+                        btn.wait_for(state='visible', timeout=5000)
+                        btn.click(force=True)
+                        page.wait_for_timeout(1500)
 
-            if delta != 0:
-                arrow_selector = "button:has(mat-icon:text('navigate_next'))" if delta > 0 else "button:has(mat-icon:text('navigate_before'))"
-                for i in range(abs(delta)):
-                    logging.info(f"Clicking date arrow, attempt {i+1}/{abs(delta)}")
-                    page.locator(arrow_selector).first.click()
-                    page.wait_for_timeout(1500) # Wait for UI to update
-
-            # --- Players ---
-            logging.info("Selecting %d players.", booking.players)
-            page.wait_for_timeout(1000)
-            page.locator('.mat-button-toggle-label-content').filter(
-                has_text=str(booking.players)
-            ).first.click(force=True)
+            # --- Players & Holes ---
+            logging.info("Selecting %d players and 18 holes.", booking.players)
             page.wait_for_timeout(2000)
+            try:
+                page.get_by_role("button", name=str(booking.players), exact=True).click(force=True, timeout=8000)
+                page.wait_for_timeout(1500)
+                
+                logging.info("Opening holes dropdown.")
+                dropdown_arrow = page.locator('.mat-select-arrow, mat-select[aria-label="Holes"]').first
+                dropdown_arrow.wait_for(state='visible', timeout=8000)
+                dropdown_arrow.click(force=True)
+                page.wait_for_timeout(1000)
+
+                logging.info("Selecting '18 Holes'.")
+                page.locator('.cdk-overlay-container').get_by_text("18 Holes", exact=True).first.click(force=True, timeout=5000)
+                page.wait_for_timeout(3000)
+            except Exception as e:
+                logging.warning("Failed to set players/holes via codegen sequence: %s", e)
 
             # --- Expand all time sections ---
             logging.info("Expanding all tee time sections.")
+            page.wait_for_timeout(1500) 
             for label in [
                 'Show more Morning tee times', 'Show more Mid Day tee times',
                 'Show more Late Day tee times', 'Show more Evening tee times',
             ]:
-                try:
-                    page.get_by_role('button', name=label).click(timeout=1000)
-                except PlaywrightTimeoutError:
-                    pass
+                btn = page.get_by_role('button', name=label)
+                if btn.is_visible():
+                    try:
+                        btn.click(force=True, timeout=2000)
+                    except: pass
 
             # --- Find tee time in window ---
             logging.info("Searching for tee time between %s and %s.", booking.earliest_time, booking.latest_time)
             earliest = parse_time(booking.desired_date, booking.earliest_time)
             latest = parse_time(booking.desired_date, booking.latest_time)
             
-            all_buttons = page.locator('button:has(.tee-time-value)').all()
+            all_buttons = page.locator('button').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
             booking_element = None
             best_time_str = ''
 
             for btn in all_buttons:
                 txt = btn.inner_text().strip()
-                m = re.search(r'(\d{1,2}:\d{2})\s*(A|P)\s*M', txt, re.IGNORECASE)
+                m = re.search(r'(\d{1,2}:\d{2})\s*([AP])\s*M?', txt, re.IGNORECASE)
                 if m:
-                    ts = f"{m.group(1)}{m.group(2)}M".upper()
+                    time_part = m.group(1)
+                    ampm = m.group(2).upper() + "M"
+                    ts = f"{time_part}{ampm}"
                     try:
                         avail = datetime.strptime(f"{booking.desired_date.strftime('%Y-%m-%d')} {ts}", '%Y-%m-%d %I:%M%p')
                         if earliest <= avail <= latest:
@@ -128,25 +163,108 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
             if dry_run:
                 return f'Dry run success at {best_time_str}'
 
-            # --- Book ---
+            # --- Book & Finalize ---
             logging.info("Attempting to book tee time: %s", best_time_str)
-            booking_element.click(force=True)
-            page.wait_for_load_state('networkidle')
 
-            for i in range(3):
+            # 1. Click tee time until the first Continue button appears
+            try:
+                for attempt in range(6):
+                    logging.info(f"Clicking tee time slot (Attempt {attempt + 1})")
+                    
+                    try:
+                        # Scroll to ensure it's in the viewport
+                        booking_element.scroll_into_view_if_needed()
+                        
+                        # Get bounding box and click in the absolute center
+                        box = booking_element.bounding_box()
+                        if box:
+                            page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                            logging.info("Triggered coordinate-based mouse click.")
+                        else:
+                            booking_element.click(force=True)
+                            logging.info("Triggered standard force click (no bounding box).")
+                    except Exception as e:
+                        logging.warning(f"Click action threw an error: {e}")
+                    
+                    try:
+                        # Wait for the modal to appear
+                        page.get_by_role("button", name="Continue").wait_for(state='visible', timeout=5000)
+                        logging.info("Checkout modal opened.")
+                        break
+                    except PlaywrightTimeoutError:
+                        if attempt == 5:
+                            screenshot_path = os.path.join(SCREENSHOT_DIR, 'modal_fail_debug.png')
+                            page.screenshot(path=screenshot_path)
+                            logging.warning(f"Modal failed to open after all attempts. Saved debug screenshot to {screenshot_path}")
+                        page.wait_for_timeout(2000)
+                        continue
+            except Exception as e:
+                logging.warning(f"Initial tee time click failed: {e}")
+
+            # 2. Sequence through the checkout steps
+            try:
+                for i in range(2):
+                    logging.info(f"Looking for button: Continue (Step {i+1})")
+                    btn = page.get_by_role("button", name="Continue")
+                    if btn.is_visible(timeout=10000):
+                        for attempt in range(3):
+                            btn.click(force=True)
+                            page.wait_for_timeout(2000)
+                            if not btn.is_visible(): break
+
+                logging.info("Looking for button: Finalize Reservation")
+                finalize_btn = page.get_by_role("button", name="Finalize Reservation")
+                finalize_btn.wait_for(state='visible', timeout=15000)
+                
+                clicked_successfully = False
+                for attempt in range(6):
+                    logging.info(f"Clicking Finalize Reservation (Attempt {attempt + 1})")
+                    try:
+                        finalize_btn.scroll_into_view_if_needed()
+                        if attempt % 2 == 0:
+                            finalize_btn.click(force=True)
+                        else:
+                            finalize_btn.dispatch_event("click")
+                    except Exception as e:
+                        logging.warning(f"Click action threw an error: {e}")
+                    
+                    try:
+                        page.wait_for_url(lambda url: "checkout" not in url.lower(), timeout=5000)
+                        logging.info("URL changed! Proceeding to success verification.")
+                        clicked_successfully = True
+                        break
+                    except PlaywrightTimeoutError:
+                        logging.warning("URL did not change. Retrying...")
+                        page.wait_for_timeout(2000)
+
                 try:
-                    confirm_btn = page.locator('button').filter(
-                        has_text=re.compile(r'Continue|Confirm|Finalize|Reservation', re.I)
-                    ).first
-                    confirm_btn.wait_for(state='visible', timeout=5000)
-                    logging.info("Clicking confirmation button: %s", (confirm_btn.inner_text()))
-                    confirm_btn.click()
-                    page.wait_for_load_state('networkidle', timeout=10000)
+                    page.wait_for_load_state('domcontentloaded', timeout=20000)
+                except: pass
+                
+                # Verify success STRICTLY
+                success_locator = page.locator('text=Success, text=Confirmed, text=Reservation #, .confirmation-number, .reservation-details, .booking-id')
+                return_btn = page.get_by_role('button', name='Return to Tee Times')
+                
+                try:
+                    if return_btn.is_visible(timeout=15000):
+                        logging.info("Booking confirmation detected. Clicking 'Return to Tee Times'.")
+                        return_btn.click(timeout=5000)
+                    elif success_locator.first.is_visible(timeout=10000):
+                        logging.info("Booking confirmation text detected on page.")
+                    else:
+                        raise PlaywrightTimeoutError("No success indicators found.")
                 except PlaywrightTimeoutError:
-                    logging.info("No more confirmation buttons found or timed out.")
-                    break
+                    if "reservation" in page.url.lower() or "success" in page.url.lower():
+                        logging.info(f"Confirmation text not found, but URL indicates success: {page.url}")
+                    elif "checkout" in page.url.lower():
+                        raise Exception(f"Still on checkout page after clicking Finalize. URL: {page.url}")
+                    else:
+                        raise Exception(f"Finalize button clicked, but reached an unknown state. URL: {page.url}")
             
-            logging.info("Booking process completed.")
+            except PlaywrightTimeoutError as e:
+                logging.error(f"Confirmation sequence timed out: {e}")
+                raise Exception(f"Failed to complete booking steps: {e}")
+            
             return f'Success! Booked {best_time_str}'
 
         except Exception as e:
@@ -163,7 +281,7 @@ def book_cps_old_post(url, booking, email, password, dry_run=False, headless=Tru
 # ForeUp
 # ---------------------------------------------------------------------------
 
-def book_via_foreup_software(url, booking, email, password, dry_run=False, headless=True):
+def book_via_foreup_software(url, booking, email, password, dry_run=False, headless=False):
     """Verified flow for ForeUp sites."""
     with Stealth().use_sync(sync_playwright()) as p:
         browser, context = _new_stealth_context(p, headless=headless)

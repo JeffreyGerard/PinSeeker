@@ -1,0 +1,9 @@
+{
+    "python.defaultInterpreterPath": "venv/bin/python",
+    "python.terminal.activateEnvInSelectedTerminal": true,
+    "python.languageServer": "Pylance",
+    "python.analysis.extraPaths": [
+        "./venv/lib/python3.11/site-packages"
+    ],
+    "python.analysis.typeCheckingMode": "basic"
+}
