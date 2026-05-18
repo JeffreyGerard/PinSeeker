@@ -7,13 +7,13 @@ import playwright_logic
 # ---------------------------------------------------------------------------
 # MOCK DATA - EDIT THESE FOR YOUR TEST
 # ---------------------------------------------------------------------------
-COURSE_TO_TEST = "capital_hills"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
-TARGET_DATE = date.today() + timedelta(days=3)
+COURSE_TO_TEST = "town_of_colonie"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
+TARGET_DATE = date.today() + timedelta(days=2)
 EARLIEST_TIME = "09:00:00"
 LATEST_TIME = "20:00:00"
 PLAYERS = 4
 DRY_RUN = False  # Set to False to actually attempt booking
-HEADLESS = True  # Set to True for hidden browser, False to see what is happening
+HEADLESS = False  # Set to True for hidden browser, False to see what is happening
 
 # Credentials (Use .env or hardcode for local debug only)
 # IMPORTANT: For local debugging only. Do not commit credentials.
@@ -52,6 +52,10 @@ COURSE_HANDLERS = {
     "stadium": {
         "url": "https://foreupsoftware.com/index.php/booking/index/3332#teetimes",
         "func": playwright_logic.book_stadium,
+    },
+    "town_of_colonie": {
+        "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
+        "func": playwright_logic.book_cps_golf,
     },
     "van_patten": {
         "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
