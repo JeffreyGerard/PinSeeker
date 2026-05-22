@@ -13,7 +13,7 @@ EARLIEST_TIME = "09:00:00"
 LATEST_TIME = "20:00:00"
 PLAYERS = 4
 DRY_RUN = False  # Set to False to actually attempt booking
-HEADLESS = False  # Set to True for hidden browser, False to see what is happening
+HEADLESS = True  # Set to True for hidden browser, False to see what is happening
 
 # Credentials (Use .env or hardcode for local debug only)
 # IMPORTANT: For local debugging only. Do not commit credentials.
@@ -55,7 +55,7 @@ COURSE_HANDLERS = {
     },
     "town_of_colonie": {
         "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
-        "func": playwright_logic.book_cps_golf,
+        "func": playwright_logic.book_town_of_colonie,
     },
     "van_patten": {
         "url": "https://foreupsoftware.com/index.php/booking/19765/2544",

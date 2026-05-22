@@ -566,3 +566,179 @@ def book_via_eagleclub(url, booking, email, password, card_number=None, card_exp
             raise
         finally:
             browser.close()
+
+# ---------------------------------------------------------------------------
+# Town of Colonie
+# ---------------------------------------------------------------------------
+
+def book_town_of_colonie(url, booking, email, password, dry_run=False, headless=True):
+    """Verified flow for Town of Colonie."""
+    with Stealth().use_sync(sync_playwright()) as p:
+        browser, context = _new_stealth_context(p, headless=headless)
+        page = context.new_page()
+        try:
+            logging.info("Navigating to Town of Colonie URL: %s", url)
+            page.goto(url, wait_until='networkidle')
+
+            frame_locator = page.get_by_role('main', name='Main content').locator('iframe[title="Embedded content"]').content_frame
+
+            # --- Auth ---
+            logging.info("Starting authentication.")
+            frame_locator.get_by_role('button', name='Sign In').click()
+            
+            email_field = frame_locator.get_by_role('textbox', name='Email')
+            email_field.wait_for(state='visible', timeout=10000)
+            email_field.click()
+            email_field.fill(email)
+            frame_locator.get_by_role('button', name='NEXT').click()
+            
+            pass_field = frame_locator.get_by_role('textbox', name='Password')
+            pass_field.wait_for(state='visible', timeout=10000)
+            pass_field.fill(password)
+            frame_locator.get_by_role('button', name='SIGN IN', exact=True).click()
+            
+            logging.info("Sign-in button clicked. Waiting for dashboard to load.")
+            page.wait_for_timeout(5000)
+
+            # --- Navigate date ---
+            logging.info("Navigating to target date: %s", booking.desired_date)
+            try:
+                date_input = frame_locator.locator('input[formcontrolname="date"], input.mat-datepicker-input, input[aria-haspopup="dialog"]').first
+                if not date_input.is_visible():
+                    date_input = frame_locator.get_by_role('textbox').nth(0) 
+
+                date_input.click()
+                page.wait_for_timeout(1000)
+                
+                day_str = str(booking.desired_date.day)
+                
+                # Fetch all exact matches for the day string
+                day_buttons = frame_locator.get_by_text(day_str, exact=True).all()
+                clicked = False
+                
+                for btn in day_buttons:
+                    try:
+                        if btn.is_visible():
+                            btn.click(force=True)
+                            clicked = True
+                            break
+                    except Exception:
+                        pass
+                
+                if not clicked:
+                    logging.warning(f"No strictly visible day {day_str} found. Trying force click inside dialog.")
+                    dialog_btn = frame_locator.locator('[id^="mat-dialog-"], .cdk-overlay-container').get_by_text(day_str, exact=True).first
+                    dialog_btn.click(force=True, timeout=3000)
+                
+                logging.info(f"Clicked day {day_str} directly.")
+                page.wait_for_timeout(2000)
+            except Exception as e:
+                logging.warning(f"Could not select date via dialog: {e}")
+
+            # --- Expand all time sections ---
+            logging.info("Expanding morning and mid day tee times.")
+            page.wait_for_timeout(1500)
+            morning_btn = frame_locator.get_by_role('button', name='Show more Morning tee times')
+            if morning_btn.is_visible():
+                morning_btn.click()
+            
+            mid_day_btn = frame_locator.get_by_role('button', name='Show more Mid Day tee times')
+            if mid_day_btn.is_visible():
+                mid_day_btn.click()
+
+            # --- Players & Holes ---
+            logging.info("Selecting %d players and 18 holes.", booking.players)
+            page.wait_for_timeout(2000)
+            try:
+                frame_locator.get_by_role('button', name=str(booking.players), exact=True).click()
+                page.wait_for_timeout(1500)
+
+                logging.info("Opening holes dropdown.")
+                # Try finding by label first
+                dropdown_arrow = frame_locator.locator('mat-select[aria-label*="Holes"], mat-select[aria-label*="holes"]').first
+
+                if not dropdown_arrow.is_visible():
+                    # Fallback: Course is usually the 1st dropdown, Holes is the 2nd
+                    dropdown_arrow = frame_locator.locator('mat-select').nth(1)
+
+                if not dropdown_arrow.is_visible():
+                    # Final fallback: click the last arrow wrapper on the page
+                    dropdown_arrow = frame_locator.locator('.mat-select-arrow-wrapper').last
+
+                dropdown_arrow.wait_for(state='visible', timeout=5000)
+                dropdown_arrow.click(force=True)
+                page.wait_for_timeout(1000)
+
+                logging.info("Selecting '18 Holes'.")
+                frame_locator.get_by_text('18 Holes', exact=True).first.click()
+                page.wait_for_timeout(3000)
+            except Exception as e:
+                logging.warning("Failed to set players/holes: %s", e)
+
+            # --- Find tee time in window ---
+            logging.info("Searching for tee time between %s and %s.", booking.earliest_time, booking.latest_time)
+            earliest = parse_time(booking.desired_date, booking.earliest_time)
+            latest = parse_time(booking.desired_date, booking.latest_time)
+            
+            all_buttons = frame_locator.locator('button').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
+            booking_element = None
+            best_time_str = ''
+
+            for btn in all_buttons:
+                txt = btn.inner_text().strip()
+                m = re.search(r'(\d{1,2}:\d{2})\s*([AP])\s*M?', txt, re.IGNORECASE)
+                if m:
+                    time_part = m.group(1)
+                    ampm = m.group(2).upper() + "M"
+                    ts = f"{time_part}{ampm}"
+                    try:
+                        avail = datetime.strptime(f"{booking.desired_date.strftime('%Y-%m-%d')} {ts}", '%Y-%m-%d %I:%M%p')
+                        if earliest <= avail <= latest:
+                            booking_element = btn
+                            best_time_str = ts
+                            logging.info("Found matching tee time: %s", best_time_str)
+                            break
+                    except ValueError:
+                        continue
+
+            if not booking_element:
+                raise Exception(f'No tee time found between {booking.earliest_time} and {booking.latest_time}')
+
+            if dry_run:
+                return f'Dry run success at {best_time_str}'
+
+            # --- Book & Finalize ---
+            logging.info("Attempting to book tee time: %s", best_time_str)
+            try:
+                booking_element.scroll_into_view_if_needed()
+                booking_element.click()
+            except Exception as e:
+                logging.warning(f"Failed to click tee time slot: {e}")
+                
+            logging.info("Looking for 'Next' button")
+            next_btn = frame_locator.get_by_role('button', name='Next')
+            try:
+                next_btn.wait_for(state='visible', timeout=20000)
+                next_btn.click()
+            except PlaywrightTimeoutError:
+                logging.warning("Could not find/click 'Next' button, continuing to Finalize.")
+
+            logging.info("Waiting for 'Finalize Reservation' button")
+            finalize_btn = frame_locator.get_by_role('button', name='Finalize Reservation')
+            finalize_btn.wait_for(state='visible', timeout=20000)
+            finalize_btn.click()
+
+            logging.info("Waiting for 'Return to Tee Times' button")
+            return_btn = frame_locator.get_by_role('button', name='Return to Tee Times')
+            return_btn.wait_for(state='visible', timeout=20000)
+            return_btn.click()
+
+            return f'Success! Booked {best_time_str}'
+
+        except Exception as e:
+            logging.error("An error occurred in book_town_of_colonie: %s", e, exc_info=True)
+            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'town_of_colonie_error.png'))
+            raise
+        finally:
+            browser.close()
+

@@ -89,6 +89,23 @@ async def create_booking(request: BookingRequest):
         print(f"Firestore error: {e}")
         raise HTTPException(status_code=500, detail="Failed to save booking request")
 
+@app.delete("/api/bookings/{job_id}")
+async def delete_booking(job_id: str, passcode: str = ""):
+    EXPECTED_PASSCODE = os.getenv("APP_PASSCODE", "golf2026")
+    if passcode != EXPECTED_PASSCODE:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    
+    if not db:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+    
+    try:
+        doc_ref = db.collection('tee_time_jobs').document(job_id)
+        doc_ref.delete()
+        return {"status": "success", "message": f"Job {job_id} deleted."}
+    except Exception as e:
+        print(f"Delete error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete job")
+
 # Exception handler for serving the React SPA (catch-all for frontend routing)
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
