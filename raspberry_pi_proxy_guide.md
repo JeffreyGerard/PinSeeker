@@ -1,177 +1,92 @@
-# 🍓 Raspberry Pi 3 Residential Proxy Setup Guide
+# 🍓 Raspberry Pi 3 Residential Proxy Setup Guide (Modern Edition)
 
-This guide describes how to transform your home Raspberry Pi 3 into a secure HTTP or SOCKS5 residential proxy. Routing your Cloud Run automation traffic through this proxy allows the booking engine to bypass bot-detection algorithms that block Google Cloud Platform (GCP) IP ranges.
+This guide provides a bulletproof, single-command setup to transform a Raspberry Pi 3 into a secure SOCKS5 residential proxy. This "Modern Edition" is optimized for **Debian 13 (Trixie)**, uses **Docker** to bypass missing native packages, and is designed to run within the **1GB RAM** constraints of the Pi 3.
 
----
-
-## 🔒 Security Architectures: Choose Your Route
-
-There are two primary ways to connect Cloud Run to your Raspberry Pi proxy:
-
-| Feature | Option A: Secure Dynamic Tunnel (Recommended) | Option B: Standard Port Forwarding |
-| :--- | :--- | :--- |
-| **Complexity** | 🟢 Low (Zero router configuration) | 🟡 Medium (Requires router access) |
-| **Security** | 🛡️ Extremely High (No exposed public ports) | ⚠️ Standard (Exposes a port to the web) |
-| **IP Stability** | 🔄 Works behind CGNAT & dynamic home IPs | ❌ Breaks if home IP changes (needs DDNS) |
-| **Technology** | **Tailscale** or **Cloudflare Tunnel** | **DDNS** (e.g. DuckDNS) + Router Port Forwarding |
+Routing your Cloud Run automation traffic through this proxy allows your booking engine to bypass bot-detection algorithms that block Google Cloud Platform (GCP) IP ranges.
 
 ---
 
-### Option A: The Secure Tunnel Route (Recommended)
+## 🔒 Security Architecture: Tailscale Tunnel
 
-Using **Tailscale** is the easiest, most secure, and robust way to connect your Cloud Run service to your home Raspberry Pi. It creates a secure, encrypted virtual private network (mesh network) between GCP and your home Pi.
+To ensure maximum security with zero configuration of your home router, we use **Tailscale**. This creates a secure, encrypted virtual private network (mesh network) between GCP and your home Pi.
 
-1. **Install Tailscale on the Raspberry Pi**:
-   ```bash
-   curl -fsSL https://tailscale.com/install.sh | sh
-   sudo tailscale up
-   ```
-2. **Authorize the Cloud Run service**:
-   We will configure Cloud Run to connect to the Tailscale network during deployment, allowing it to address your Raspberry Pi using its stable Tailscale IP (e.g., `100.x.y.z`) safely without any router configuration!
+*   **No Exposed Ports**: Your Pi remains invisible to the public internet.
+*   **CGNAT Compatible**: Works even if your ISP uses Carrier-Grade NAT.
+*   **Stable Identity**: Your Pi gets a stable internal IP (e.g., `100.x.y.z`) that doesn't change.
 
----
-
-### Option B: The Port Forwarding Route
-
-If you prefer direct connection, you must forward a port on your home router.
-
-1. **Static IP**: Assign a static LAN IP to your Raspberry Pi in your home router settings (e.g., `192.168.1.150`).
-2. **Port Forward**: Forward a custom external port (e.g., `8888`) to the Raspberry Pi's proxy port (`8888` for HTTP or `1080` for SOCKS5) on your router.
-3. **Dynamic DNS (DDNS)**: If your home ISP changes your public IP frequently, set up [DuckDNS](https://www.duckdns.org/) or [No-IP](https://www.noip.com/) on the Pi to maintain a stable address (e.g., `myhome.duckdns.org`).
+### 1. Install Tailscale
+Run this on your Raspberry Pi:
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+```
+Follow the login link provided in the terminal to authenticate your Pi.
 
 ---
 
-## 🛠️ Step-by-Step Proxy Server Installation
+## 🛠️ Step-by-Step Proxy Installation
 
-Log into your Raspberry Pi via SSH and follow the instructions below to install either an **HTTP Proxy (Squid)** or a **SOCKS5 Proxy (Dante)**.
+We use a lightweight Docker container for the proxy. This ensures compatibility with Debian Trixie and keeps memory usage extremely low.
 
-### Path 1: Install Squid (HTTP/HTTPS Proxy)
+### 2. Install Docker
+If Docker isn't installed, run the official convenience script:
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh get-docker.sh
+sudo usermod -aG docker $USER
+# Log out and log back in for group changes to take effect
+```
 
-Squid is a robust, widely-supported HTTP proxy.
+### 3. Deploy the SOCKS5 Proxy
+Replace `YOUR_USERNAME` and `YOUR_PASSWORD` with secure credentials. This command pulls an ultra-lightweight `go-socks5-proxy` image and runs it as a background service that auto-restarts on reboot.
 
-1. **Update packages and install Squid**:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y squid apache2-utils
-   ```
-
-2. **Generate your proxy credentials**:
-   Replace `myusername` and `mypassword` with your desired proxy authentication credentials:
-   ```bash
-   sudo htpasswd -cb /etc/squid/passwd myusername mypassword
-   ```
-
-3. **Configure Squid**:
-   Backup and overwrite the configuration file `/etc/squid/squid.conf`:
-   ```bash
-   sudo mv /etc/squid/squid.conf /etc/squid/squid.conf.bak
-   sudo nano /etc/squid/squid.conf
-   ```
-   Paste the following config:
-   ```text
-   # Define proxy port
-   http_port 8888
-
-   # Configure Basic Authentication using the passwd file
-   auth_param basic program /usr/lib/squid/basic_ncsa_auth /etc/squid/passwd
-   auth_param basic children 5
-   auth_param basic realm PinSeeker Secure Residential Proxy
-   auth_param basic credentialsttl 2 hours
-
-   # Create ACLs
-   acl authenticated proxy_auth REQUIRED
-   acl SSL_ports port 443
-   acl Safe_ports port 80          # http
-   acl Safe_ports port 443         # https
-
-   # Deny requests to unsafe ports
-   http_access deny !Safe_ports
-   
-   # Require authentication
-   http_access allow authenticated
-   
-   # Deny everything else
-   http_access deny all
-   ```
-
-4. **Restart Squid**:
-   ```bash
-   sudo systemctl restart squid
-   sudo systemctl enable squid
-   ```
-
----
-
-### Path 2: Install Dante (SOCKS5 Proxy)
-
-SOCKS5 is faster and operates at a lower network layer, making it extremely efficient for scraping.
-
-1. **Install Dante Server**:
-   ```bash
-   sudo apt-get update
-   sudo apt-get install -y dante-server
-   ```
-
-2. **Create a Proxy User**:
-   Dante uses standard Linux users for authentication. Create a dedicated user for your proxy:
-   ```bash
-   sudo useradd -r -s /bin/false proxyuser
-   echo "proxyuser:proxypassword" | sudo chpasswd
-   ```
-
-3. **Configure Dante**:
-   Backup and overwrite `/etc/dftpd.conf` (or `/etc/dante.conf`):
-   ```bash
-   sudo mv /etc/dftpd.conf /etc/dftpd.conf.bak
-   sudo nano /etc/dftpd.conf
-   ```
-   Paste the following config (replace `eth0` or `wlan0` with your active Pi interface):
-   ```text
-   logoutput: stderr
-
-   # Port Dante listens on
-   internal: 0.0.0.0 port = 1080
-
-   # Interface used for outgoing requests (e.g. eth0 or wlan0)
-   external: eth0
-
-   # Authentication method (username/password)
-   socksmethod: username
-   clientmethod: none
-
-   # Allow all clients to connect to the internal port
-   client pass {
-       from: 0.0.0.0/0 to: 0.0.0.0/0
-       log: connect disconnect error
-   }
-
-   # Pass traffic when authenticated
-   socks pass {
-       from: 0.0.0.0/0 to: 0.0.0.0/0
-       command: connect
-       log: connect disconnect error
-   }
-   ```
-
-4. **Restart Dante**:
-   ```bash
-   sudo systemctl restart danted
-   sudo systemctl enable danted
-   ```
+```bash
+docker run -d \
+  --name pinseeker-proxy \
+  --restart always \
+  -p 1080:1080 \
+  -e PROXY_USER=YOUR_USERNAME \
+  -e PROXY_PASSWORD=YOUR_PASSWORD \
+  serjs/go-socks5-proxy
+```
 
 ---
 
 ## 🧪 Testing Your Residential Proxy
 
-From your personal computer or any separate terminal, test the proxy server to verify that it correctly intercepts traffic and reports your home IP address:
+From your personal computer (or any device also on your Tailscale network), test the proxy server to verify that it correctly intercepts traffic and reports your home IP address. 
+
+**Note**: Use the **Tailscale IP** of your Pi (found by running `tailscale ip -4` on the Pi).
 
 ```bash
-# Test HTTP Proxy (Squid)
-curl --proxy http://myusername:mypassword@<PI_IP>:8888 https://ifconfig.me
-
-# Test SOCKS5 Proxy (Dante)
-curl --socks5-hostname proxyuser:proxypassword@<PI_IP>:1080 https://ifconfig.me
+# Test SOCKS5 Proxy
+curl --socks5-hostname YOUR_USERNAME:YOUR_PASSWORD@<TAILSCALE_IP>:1080 https://ifconfig.me
 ```
 
-This should return your **home residential public IP** instead of your local/office network IP!
-Once confirmed, you are ready to configure these credentials inside your PinSeeker Cloud Run deployment environment.
+### Expected Result
+The command should return your **home residential public IP** (check it at [whatismyip.com](https://www.whatismyip.com) first to verify).
+
+---
+
+## 🚀 Cloud Run Integration
+
+When deploying your PinSeeker service to Cloud Run:
+1.  Ensure the Cloud Run service is connected to your Tailscale network (via Tailscale's [Cloud Run integration](https://tailscale.com/kb/1278/cloud-run/)).
+2.  Set the `PROXY_URL` environment variable in Cloud Run:
+    `socks5://YOUR_USERNAME:YOUR_PASSWORD@<TAILSCALE_IP>:1080`
+
+> **💡 Pro-Tip for Playwright Users:**
+> SOCKS5 credentials in a URL string can sometimes fail if your password contains special characters (like `#`, `@`, or `?`). For maximum reliability in your automation scripts, pass credentials explicitly during browser launch:
+>
+> ```python
+> browser = playwright.chromium.launch(
+>     proxy={
+>         "server": "socks5://<TAILSCALE_IP>:1080",
+>         "username": "YOUR_USERNAME",
+>         "password": "YOUR_PASSWORD"
+>     }
+> )
+> ```
+
+Your automation traffic will now appear to originate from your living room!
+
