@@ -482,7 +482,7 @@ def book_town_of_colonie(url, booking, email, password, dry_run=False, headless=
 # ForeUp
 # ---------------------------------------------------------------------------
 
-def book_via_foreup_software(url, booking, email, password, dry_run=False, headless=False):
+def book_via_foreup_software(url, booking, email, password, dry_run=False, headless=False, pay_at_facility=False):
     """Verified flow for ForeUp sites."""
     with Stealth().use_sync(sync_playwright()) as p:
         browser, context = _new_stealth_context(p, headless=headless)
@@ -623,6 +623,15 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             
             if not dry_run:
                 book_btn.click()
+                
+                if pay_at_facility:
+                    logging.info("Handling 'Pay At Facility' modal.")
+                    try:
+                        page.get_by_role("radio", name="Pay At Facility").check(timeout=10000)
+                        page.locator("#select-payment-type-modal").get_by_role("button", name=re.compile(r"Book Time", re.I)).click()
+                    except Exception as e:
+                        logging.warning(f"Could not handle 'Pay At Facility': {e}")
+                
                 # Wait for final success message
                 page.wait_for_timeout(5000) 
             else:
@@ -640,7 +649,7 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             browser.close()
 
 
-def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_run=False, headless=True):
+def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_run=False, headless=True, pay_at_facility=False):
     # Inject bc param into hash
     if '#' in url:
         base, fragment = url.split('#', 1)
@@ -648,7 +657,7 @@ def book_via_foreup_index(url, booking_class_id, booking, email, password, dry_r
         url = f"{base}#{fragment}{sep}bc={booking_class_id}"
     else:
         url = f"{url}#/teetimes?bc={booking_class_id}"
-    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless, pay_at_facility=pay_at_facility)
 
 
 # Convenience wrappers
@@ -656,7 +665,7 @@ def book_orchard_creek(url, booking, email, password, dry_run=False, headless=Tr
     return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
 
 def book_schenectady_muni(url, booking, email, password, dry_run=False, headless=True):
-    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless, pay_at_facility=True)
 
 def book_fairways_halfmoon(url, booking, email, password, dry_run=False, headless=True):
     return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
