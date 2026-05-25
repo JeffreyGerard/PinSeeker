@@ -55,6 +55,9 @@ import argparse
 def execute_booking(job_id, job_data, dry_run=False):
     logging.info(f"Executing Snipe for Job {job_id} at {job_data['course_name']} (Dry Run: {dry_run})")
     
+    if db is None:
+        raise ValueError("Firestore client is not initialized.")
+        
     # 1. Update status to RUNNING
     doc_ref = db.collection('tee_time_jobs').document(job_id)
     doc_ref.update({"status": "RUNNING"})
@@ -74,22 +77,21 @@ def execute_booking(job_id, job_data, dry_run=False):
 
         # 3. The Course Router
         if "capital hills" in course_name:
-            result_message = playwright_logic.book_cps_golf("https://cps.com/capital", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_cps_golf("https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225", booking, email, password, dry_run=dry_run)
         elif "post road" in course_name:
-            result_message = playwright_logic.book_cps_old_post("https://cps.com/post", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_cps_old_post("https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225", booking, email, password, dry_run=dry_run)
         elif "orchard creek" in course_name:
-            result_message = playwright_logic.book_orchard_creek("https://foreupsoftware.com/index.php/booking/20340/3565", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_orchard_creek("https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes", booking, email, password, dry_run=dry_run)
         elif "schenectady" in course_name:
-            result_message = playwright_logic.book_schenectady_muni("https://foreupsoftware.com/index.php/booking/19692/2163", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_schenectady_muni("https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes", booking, email, password, dry_run=dry_run)
         elif "fairways" in course_name:
-            result_message = playwright_logic.book_fairways_halfmoon("https://foreupsoftware.com/index.php/booking/19714/2324", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_fairways_halfmoon("https://foreupsoftware.com/index.php/booking/22948/12410#/welcome", booking, email, password, dry_run=dry_run)
         elif "stadium" in course_name:
-            result_message = playwright_logic.book_stadium("https://foreupsoftware.com/index.php/booking/19765/2544", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_stadium("https://foreupsoftware.com/index.php/booking/index/3332#teetimes", booking, email, password, dry_run=dry_run)
         elif "van patten" in course_name:
             result_message = playwright_logic.book_van_patten("https://foreupsoftware.com/index.php/booking/19765/2544", booking, email, password, dry_run=dry_run)
         elif "eagle crest" in course_name:
-            # Requires CC info, passing None for now as per function defaults
-            result_message = playwright_logic.book_via_eagleclub("https://eaglecrest.com/book", booking, email, password, dry_run=dry_run)
+            result_message = playwright_logic.book_via_eagleclub("https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101", booking, email, password, dry_run=dry_run)
         else:
             raise Exception(f"No routing logic found for course: {course_name}")
 
@@ -114,6 +116,10 @@ def find_and_wait_for_job():
     logging.info("Windows Sniper started. Checking for imminent jobs...")
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     
+    if db is None:
+        logging.error("Firestore client is not initialized.")
+        return
+        
     try:
         jobs_ref = db.collection('tee_time_jobs').where('status', '==', 'PENDING')
         docs = jobs_ref.stream()
@@ -164,6 +170,9 @@ if __name__ == '__main__':
 
     if args.debug_job:
         logging.info(f"--- DEBUG MODE --- Forcing execution of job: {args.debug_job}")
+        if db is None:
+            logging.error("Firestore client is not initialized.")
+            sys.exit(1)
         doc_ref = db.collection('tee_time_jobs').document(args.debug_job)
         doc = doc_ref.get()
         if doc.exists:
