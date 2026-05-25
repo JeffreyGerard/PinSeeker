@@ -1,0 +1,37 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - link "Town of Colonie Golf Course" [ref=e7] [cursor=pointer]:
+      - /url: index.html
+      - heading "Town of Colonie Golf Course" [level=2] [ref=e9]
+    - button "Sign In" [ref=e11] [cursor=pointer]:
+      - generic [ref=e12]: Sign In
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic:
+        - generic:
+          - img [ref=e117]
+          - generic [ref=e119]:
+            - paragraph [ref=e121]: Please Enter Email to Continue
+            - generic [ref=e123]:
+              - generic [ref=e124]:
+                - paragraph [ref=e125]: Email
+                - textbox "Email" [active] [ref=e130]
+              - button "NEXT" [disabled] [ref=e132]: NEXT
+              - paragraph [ref=e134]: Don't have an account? Sign up
+    - paragraph [ref=e96]:
+      - link "Town of Colonie Golf Course" [ref=e97] [cursor=pointer]:
+        - /url: https://www.colonie.org/departments/parksandrec/golfcourse/
+        - text: Town of Colonie Golf Course
+      - link "418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181" [ref=e98] [cursor=pointer]:
+        - /url: https://maps.google.com/?q=418 Consaul Rd, Schenectady, NY 12304   |   (518) 374-4181
+        - text: 418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181
+      - text: Build No.25.1.9.61297
+      - generic [ref=e101] [cursor=pointer]:
+        - img [ref=e103]: language
+        - combobox "English" [ref=e105]:
+          - generic [ref=e108]: English
+      - link "Powered By" [ref=e111] [cursor=pointer]:
+        - /url: https://www.clubprophetsystems.com/
+        - generic [ref=e112]:
+          - text: Powered By
+          - img [ref=e113]

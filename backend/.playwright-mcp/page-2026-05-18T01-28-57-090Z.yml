@@ -1,0 +1,46 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - link "Town of Colonie Golf Course" [ref=e7] [cursor=pointer]:
+      - /url: index.html
+      - heading "Town of Colonie Golf Course" [level=2] [ref=e9]
+    - button "Sign In" [ref=e11] [cursor=pointer]:
+      - generic [ref=e12]: Sign In
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic:
+        - generic:
+          - generic:
+            - img [ref=e137]
+            - generic [ref=e139]:
+              - generic [ref=e140]:
+                - paragraph [ref=e141]: Welcome back!
+                - paragraph [ref=e142]: Please sign in
+              - generic [ref=e144]:
+                - generic [ref=e145]:
+                  - paragraph [ref=e146]: Email
+                  - textbox "Email" [ref=e151]: jeff.gerard05@gmail.com
+                  - paragraph [ref=e152]: Password
+                  - textbox "Password" [active] [ref=e157]
+                - generic [ref=e158]:
+                  - button "SIGN IN" [disabled] [ref=e159]: SIGN IN
+                  - paragraph [ref=e160]:
+                    - text: Forget your login?
+                    - link "Password Recovery" [ref=e161] [cursor=pointer]:
+                      - /url: /onlineresweb/auth/forgot-password
+    - paragraph [ref=e96]:
+      - link "Town of Colonie Golf Course" [ref=e97] [cursor=pointer]:
+        - /url: https://www.colonie.org/departments/parksandrec/golfcourse/
+        - text: Town of Colonie Golf Course
+      - link "418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181" [ref=e98] [cursor=pointer]:
+        - /url: https://maps.google.com/?q=418 Consaul Rd, Schenectady, NY 12304   |   (518) 374-4181
+        - text: 418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181
+      - text: Build No.25.1.9.61297
+      - generic [ref=e101] [cursor=pointer]:
+        - img [ref=e103]: language
+        - combobox "English" [ref=e105]:
+          - generic [ref=e108]: English
+      - link "Powered By" [ref=e111] [cursor=pointer]:
+        - /url: https://www.clubprophetsystems.com/
+        - generic [ref=e112]:
+          - text: Powered By
+          - img [ref=e113]

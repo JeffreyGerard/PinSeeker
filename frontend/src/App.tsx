@@ -3,6 +3,16 @@ import {
   Flag, Crosshair, LayoutDashboard, PlusCircle, Calendar, LogOut, Clock, 
   CheckCircle2, AlertCircle, ChevronRight, Menu, X, Lock, Terminal, Trash2, XCircle
 } from 'lucide-react';
+import { auth, db } from './firebase';
+import { 
+  signInWithEmailAndPassword, 
+  signOut, 
+  onAuthStateChanged, 
+  sendPasswordResetEmail, 
+  updatePassword,
+  User 
+} from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 // --- API Configuration ---
 // In production (Cloud Run), the API is on the same host.
@@ -22,7 +32,7 @@ const AVAILABLE_COURSES = [
 
 // --- Types ---
 interface BookingRequest {
-  id: string; // Changed to string for Firestore UUIDs
+  id: string; // Firestore UUIDs
   course: number;
   course_name: string;
   desired_date: string;
@@ -36,40 +46,120 @@ interface BookingRequest {
   updated_at: string;
 }
 
-// --- Components ---
+// --- Auth Components ---
 
-const PasscodeScreen = ({ onLogin }: { onLogin: (p: string) => void }) => {
-  const [passcode, setPasscode] = useState('');
+const LoginScreen = () => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin(passcode);
+    setLoading(true);
+    setError(null);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (err: any) {
+      let msg = "Invalid email or password.";
+      if (err.code === "auth/invalid-credential") {
+        msg = "Incorrect login credentials.";
+      } else if (err.code === "auth/invalid-email") {
+        msg = "Please enter a valid email address.";
+      }
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotSuccess(false);
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail);
+      setForgotSuccess(true);
+      setForgotEmail('');
+    } catch (err: any) {
+      setForgotError(err.message || "Failed to send reset email.");
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-          <div className="bg-emerald-600 p-8 text-center">
-            <div className="w-16 h-16 bg-white/20 rounded-2xl mx-auto flex items-center justify-center backdrop-blur-sm mb-4">
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 relative overflow-hidden selection:bg-emerald-100 selection:text-emerald-950">
+      {/* Visual background details */}
+      <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-emerald-800/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-blue-800/10 blur-[120px] pointer-events-none" />
+
+      <div className="w-full max-w-md space-y-6 z-10">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+          <div className="bg-emerald-600 p-8 text-center relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-5">
+              <Crosshair className="w-24 h-24 rotate-45" />
+            </div>
+            <div className="w-16 h-16 bg-white/20 rounded-2xl mx-auto flex items-center justify-center backdrop-blur-md mb-4 shadow-lg shadow-black/5 animate-pulse">
               <Flag className="w-8 h-8 text-white" />
             </div>
             <h1 className="text-3xl font-black text-white tracking-tight uppercase italic">PinSeeker</h1>
-            <p className="text-emerald-100 mt-2 font-medium">Automated Tee Time Engine</p>
+            <p className="text-emerald-100 mt-2 font-medium text-sm tracking-wide">Automated Tee Time Engine</p>
           </div>
           
-          <form onSubmit={handleSubmit} className="p-8 space-y-6">
+          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <span className="text-sm font-semibold leading-tight">{error}</span>
+              </div>
+            )}
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">Access Passcode</label>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Email Address</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                    placeholder="name@domain.com"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2 px-1">
+                  <label className="block text-xs font-black uppercase tracking-widest text-slate-400">Password</label>
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      setShowForgotModal(true);
+                      setForgotSuccess(false);
+                      setForgotError(null);
+                    }}
+                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
                 <div className="relative">
                   <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
                   <input 
                     type="password" 
-                    value={passcode}
-                    onChange={(e) => setPasscode(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-                    placeholder="Enter the secret passcode"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                    placeholder="Enter account password"
                     required
                   />
                 </div>
@@ -78,15 +168,179 @@ const PasscodeScreen = ({ onLogin }: { onLogin: (p: string) => void }) => {
 
             <button 
               type="submit" 
-              className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-900/10 active:scale-95 disabled:opacity-50"
             >
-              Unlock Terminal
-              <ChevronRight className="w-4 h-4" />
+              {loading ? 'Authenticating...' : 'Unlock Terminal'}
+              {!loading && <ChevronRight className="w-4 h-4" />}
             </button>
           </form>
           <div className="bg-slate-50 p-4 text-center border-t border-slate-100">
-            <p className="text-xs text-slate-400 font-medium">Restricted Access • Authorized Personnel Only</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Restricted Access • Authorized Users Only</p>
           </div>
+        </div>
+      </div>
+
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden border border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-slate-900 p-6 text-white flex justify-between items-center border-b border-slate-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-emerald-400" />
+                <span className="font-bold text-lg">Reset Password</span>
+              </div>
+              <button 
+                onClick={() => setShowForgotModal(false)}
+                className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleForgotPassword} className="p-6 space-y-4">
+              {forgotSuccess ? (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl space-y-2">
+                  <div className="flex gap-2 font-bold text-sm">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                    <span>Instructions Sent!</span>
+                  </div>
+                  <p className="text-xs font-semibold leading-relaxed">Check your email inbox for a secure link to reset your password. You can close this window now.</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm font-medium text-slate-500 leading-relaxed">Enter your registered email address below, and we will automatically dispatch a secure link to reset your account password.</p>
+                  
+                  {forgotError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs font-semibold">
+                      {forgotError}
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Email Address</label>
+                    <input 
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                      placeholder="name@domain.com"
+                      required
+                    />
+                  </div>
+
+                  <button 
+                    type="submit" 
+                    disabled={forgotLoading}
+                    className="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                  >
+                    {forgotLoading ? 'Sending link...' : 'Send Reset Instructions'}
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+
+const ForcePasswordChangeScreen = ({ onPasswordUpdated }: { onPasswordUpdated: () => void }) => {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) throw new Error("No active user.");
+      
+      // 1. Update password in Firebase Auth
+      await updatePassword(currentUser, newPassword);
+
+      // 2. Set firstLogin to false in Firestore user profile
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      await setDoc(userDocRef, { firstLogin: false }, { merge: true });
+
+      alert("Success! Password securely updated.");
+      onPasswordUpdated();
+    } catch (err: any) {
+      setError(err.message || "Failed to update password.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100">
+          <div className="bg-emerald-600 p-8 text-center">
+            <div className="w-16 h-16 bg-white/20 rounded-2xl mx-auto flex items-center justify-center backdrop-blur-md mb-4 shadow-lg">
+              <Lock className="w-8 h-8 text-white" />
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight uppercase italic">Secure Onboarding</h1>
+            <p className="text-emerald-100 mt-2 font-medium text-xs">Please establish a secure password to activate your terminal account.</p>
+          </div>
+          
+          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <span className="text-xs font-semibold leading-tight">{error}</span>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">New Secure Password</label>
+                <input 
+                  type="password" 
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                  placeholder="At least 6 characters"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Confirm Password</label>
+                <input 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                  placeholder="Re-enter secure password"
+                  required
+                />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={submitting}
+              className="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 shadow-lg active:scale-95 disabled:opacity-50"
+            >
+              {submitting ? 'Registering Password...' : 'Save Password & Enter'}
+              {!submitting && <ChevronRight className="w-4 h-4" />}
+            </button>
+          </form>
         </div>
       </div>
     </div>
@@ -94,12 +348,15 @@ const PasscodeScreen = ({ onLogin }: { onLogin: (p: string) => void }) => {
 };
 
 
-const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }: { 
+// --- Main Application Components ---
+
+const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout, onProfileOpen }: { 
   activeTab: string, 
   setActiveTab: (t: string) => void,
   isOpen: boolean,
   setIsOpen: (o: boolean) => void,
-  onLogout: () => void
+  onLogout: () => void,
+  onProfileOpen: () => void
 }) => {
   const menuItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -122,7 +379,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }: {
         fixed left-0 top-0 h-screen w-72 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800 z-50 transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
-        <div className="p-8 flex items-center justify-between text-white">
+        <div className="p-8 flex items-center justify-between text-white border-b border-slate-800/40">
           <div className="flex items-center gap-3">
             <div className="relative">
               <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center rotate-3 shadow-lg shadow-emerald-500/20">
@@ -130,7 +387,7 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }: {
               </div>
               <Crosshair className="w-4 h-4 text-emerald-300 absolute -bottom-1 -right-1" />
             </div>
-            <span className="text-2xl font-black tracking-tight uppercase italic">PinSeeker</span>
+            <span className="text-2xl font-black tracking-tight uppercase italic text-white">PinSeeker</span>
           </div>
           <button onClick={() => setIsOpen(false)} className="md:hidden p-2 hover:bg-slate-800 rounded-lg transition-colors">
             <X className="w-6 h-6 text-slate-400" />
@@ -154,13 +411,20 @@ const Sidebar = ({ activeTab, setActiveTab, isOpen, setIsOpen, onLogout }: {
           ))}
         </nav>
 
-        <div className="p-6 border-t border-slate-800 bg-slate-900/50">
+        <div className="p-6 border-t border-slate-800 bg-slate-900/50 space-y-2">
           <button 
-            onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-700 hover:border-red-500/50 hover:text-red-400 transition-all text-sm font-medium"
+            onClick={onProfileOpen}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-700 hover:border-slate-500 hover:text-white transition-all text-sm font-medium"
           >
             <Lock className="w-4 h-4" />
-            <span>Lock Terminal</span>
+            <span>Profile settings</span>
+          </button>
+          <button 
+            onClick={onLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-transparent hover:border-red-500/30 hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-all text-sm font-semibold"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Sign Out</span>
           </button>
         </div>
       </aside>
@@ -198,7 +462,7 @@ const StatusBadge = ({ status }: { status: string }) => {
 };
 
 const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], emptyMessage: string }) => (
-  <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden">
+  <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left border-collapse">
         <thead>
@@ -255,8 +519,9 @@ const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], 
   </div>
 );
 
-const Dashboard = ({ bookings, isLoading }: { bookings: BookingRequest[], isLoading: boolean }) => {
-  if (isLoading) return (
+const Dashboard = ({ bookings, isLoading, isSyncing }: { bookings: BookingRequest[], isLoading: boolean, isSyncing: boolean }) => {
+  // Only display full screen spinner on first load if we don't have bookings in cache
+  if (isLoading && bookings.length === 0) return (
     <div className="flex flex-col items-center justify-center h-64 space-y-4">
       <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
       <p className="text-slate-500 font-medium animate-pulse">Scanning the greens...</p>
@@ -271,15 +536,17 @@ const Dashboard = ({ bookings, isLoading }: { bookings: BookingRequest[], isLoad
   const nextRun = sortedPending[0]?.release_time || 'None';
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-300">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-black text-slate-900 tracking-tight">Mission Control</h1>
           <p className="text-slate-500 mt-1 font-medium">Overview of all system activity.</p>
         </div>
-        <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 flex items-center gap-3">
-          <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-sm"></div>
-          <span className="text-sm font-bold text-emerald-700 uppercase tracking-wide">Server Live</span>
+        <div className="bg-emerald-50 px-4 py-2 rounded-xl border border-emerald-100 flex items-center gap-3 self-start md:self-auto shadow-sm">
+          <div className={`w-2.5 h-2.5 rounded-full ${isSyncing ? 'bg-blue-500 animate-ping' : 'bg-emerald-500 animate-pulse'} shadow-sm`}></div>
+          <span className="text-xs font-bold text-emerald-700 uppercase tracking-wide">
+            {isSyncing ? 'Syncing...' : 'Server Live'}
+          </span>
         </div>
       </div>
 
@@ -330,7 +597,7 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-20">
+    <div className="max-w-4xl mx-auto pb-20 animate-in fade-in duration-300">
       <div className="mb-10 text-center md:text-left">
         <h1 className="text-4xl font-black text-slate-900 tracking-tight">Deploy A Bot</h1>
         <p className="text-slate-500 font-medium mt-2">Configure the seeker for your next round.</p>
@@ -368,7 +635,7 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
                   </span>
                 </div>
                 {Number(formData.course) === course.id && (
-                  <div className="bg-emerald-500 rounded-full p-1.5 shadow-md">
+                  <div className="bg-emerald-500 rounded-full p-1.5 shadow-md animate-in zoom-in duration-200">
                     <CheckCircle2 className="w-5 h-5 text-white" />
                   </div>
                 )}
@@ -524,18 +791,174 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
   );
 };
 
-const App = () => {
-  const [passcode, setPasscode] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [bookings, setBookings] = useState<BookingRequest[]>([]);
+
+const ProfileModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const fetchData = async () => {
-    if (!passcode) return;
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(false);
+
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/bookings?passcode=${passcode}`);
+      if (!auth.currentUser) throw new Error("No active session.");
+      await updatePassword(auth.currentUser, newPassword);
+      setSuccess(true);
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setError(err.message || "Failed to change password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-md flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden border border-slate-100 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-slate-900 p-6 text-white flex justify-between items-center border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <Lock className="w-5 h-5 text-emerald-400" />
+            <span className="font-bold text-lg">Change Password</span>
+          </div>
+          <button 
+            onClick={onClose}
+            className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleUpdate} className="p-6 space-y-4">
+          {success && (
+            <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-4 rounded-xl flex gap-2 font-bold text-xs">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span>Password successfully updated!</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-xs font-semibold">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">New Password</label>
+            <input 
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+              placeholder="At least 6 characters"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Confirm New Password</label>
+            <input 
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+              placeholder="Re-enter secure password"
+              required
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={loading}
+            className="w-full bg-slate-900 text-white font-bold py-3.5 rounded-xl hover:bg-slate-800 transition-all flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50 shadow-lg"
+          >
+            {loading ? 'Updating password...' : 'Update Password'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+
+const App = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  
+  const [bookings, setBookings] = useState<BookingRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+
+  // 1. Authenticate & Profile listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const userDocRef = doc(db, 'users', currentUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            setProfile(userDoc.data());
+          } else {
+            // First login, setup initial profile document
+            const newProfile = {
+              uid: currentUser.uid,
+              email: currentUser.email,
+              firstLogin: true, // Forces password change on initial login
+              createdAt: new Date().toISOString()
+            };
+            await setDoc(userDocRef, newProfile);
+            setProfile(newProfile);
+          }
+        } catch (e) {
+          console.error("Firestore user profile fetch failed", e);
+        }
+      } else {
+        setProfile(null);
+        setBookings([]);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Fetch Data with silent background sync
+  const fetchData = async (isBackground = false) => {
+    if (!auth.currentUser) return;
+    if (!isBackground) {
+      setLoading(true);
+    } else {
+      setIsSyncing(true);
+    }
+
+    try {
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${API_URL}/bookings`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (res.ok) {
         setBookings(await res.json());
       }
@@ -543,53 +966,79 @@ const App = () => {
       console.warn("Retrying connection to API...");
     } finally {
       setLoading(false);
+      setIsSyncing(false);
     }
   };
 
+  // 3. Setup background polling if user is logged in
   useEffect(() => {
-    if (passcode) {
-      fetchData();
-      const interval = setInterval(fetchData, 10000); // Polling every 10 seconds
+    if (user && profile && !profile.firstLogin) {
+      fetchData(false);
+      const interval = setInterval(() => {
+        fetchData(true);
+      }, 10000); // Poll silently every 10 seconds
       return () => clearInterval(interval);
     }
-  }, [passcode]);
+  }, [user, profile]);
 
-  const handleLogin = (code: string) => {
-    setPasscode(code);
-  };
-
-  const handleLogout = () => {
-    setPasscode(null);
-    setBookings([]);
-    setActiveTab('dashboard');
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setActiveTab('dashboard');
+    } catch (e) {
+      alert("Sign out failed.");
+    }
   };
 
   const handleNewBooking = async (data: any) => {
-    if (!passcode) return;
+    if (!auth.currentUser) return;
     try {
-      const payload = { ...data, passcode };
+      const token = await auth.currentUser.getIdToken();
       const res = await fetch(`${API_URL}/bookings`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
       });
       if (res.ok) {
         alert("Bot Armed! Job sent to Firestore.");
-        fetchData();
+        fetchData(true);
         setActiveTab('dashboard');
       } else {
         const errorData = await res.json();
-        alert(`Failed: ${errorData.detail || "Invalid Passcode"}`);
+        alert(`Failed: ${errorData.detail || "Error adding booking"}`);
       }
     } catch (e) {
       alert("Lost connection to server.");
     }
   };
 
-  if (!passcode) {
-    return <PasscodeScreen onLogin={handleLogin} />;
+  const handleForcedPasswordUpdated = () => {
+    setProfile((prev: any) => ({ ...prev, firstLogin: false }));
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center space-y-4">
+        <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] animate-pulse">Securing Terminal...</p>
+      </div>
+    );
   }
 
+  // View: Unauthenticated Login
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  // View: Forced temporary password change
+  if (profile?.firstLogin) {
+    return <ForcePasswordChangeScreen onPasswordUpdated={handleForcedPasswordUpdated} />;
+  }
+
+  // View: Authenticated Main App
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans selection:bg-emerald-100 selection:text-emerald-900">
       <Sidebar 
@@ -598,9 +1047,11 @@ const App = () => {
         isOpen={isSidebarOpen} 
         setIsOpen={setIsSidebarOpen} 
         onLogout={handleLogout}
+        onProfileOpen={() => setIsProfileOpen(true)}
       />
       
       <main className="flex-1 w-full md:ml-72 transition-all duration-300">
+        {/* Mobile Header */}
         <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200 px-6 py-4 flex justify-between items-center md:hidden">
           <div className="flex items-center gap-3">
              <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center shadow-lg shadow-emerald-500/20">
@@ -616,11 +1067,19 @@ const App = () => {
           </button>
         </header>
 
+        {/* Dashboard / Request Area */}
         <div className="p-6 md:p-12">
-          {activeTab === 'dashboard' && <Dashboard bookings={bookings} isLoading={loading} />}
-          {activeTab === 'new-request' && <NewRequestForm onSubmit={handleNewBooking} />}
+          {activeTab === 'dashboard' && (
+            <Dashboard bookings={bookings} isLoading={loading} isSyncing={isSyncing} />
+          )}
+          {activeTab === 'new-request' && (
+            <NewRequestForm onSubmit={handleNewBooking} />
+          )}
         </div>
       </main>
+
+      {/* Account Settings modal */}
+      <ProfileModal isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />
     </div>
   );
 };

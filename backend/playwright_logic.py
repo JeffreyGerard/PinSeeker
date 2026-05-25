@@ -22,10 +22,23 @@ def parse_time(date_obj, time_obj):
 
 
 def _new_stealth_context(p, headless=True):
-    """Launch a Chromium context with anti-bot flags."""
+    """Launch a Chromium context with anti-bot flags and optional proxy support."""
+    proxy_server = os.getenv("PLAYWRIGHT_PROXY_SERVER")
+    proxy_username = os.getenv("PLAYWRIGHT_PROXY_USERNAME")
+    proxy_password = os.getenv("PLAYWRIGHT_PROXY_PASSWORD")
+
+    proxy_dict = None
+    if proxy_server:
+        logging.info("Routing traffic through residential proxy: %s", proxy_server)
+        proxy_dict = {"server": proxy_server}
+        if proxy_username and proxy_password:
+            proxy_dict["username"] = proxy_username
+            proxy_dict["password"] = proxy_password
+
     browser = p.chromium.launch(
         headless=headless,
         args=['--disable-blink-features=AutomationControlled', '--disable-gpu', '--no-sandbox'],
+        proxy=proxy_dict
     )
     context = browser.new_context(
         user_agent=USER_AGENT,
@@ -276,6 +289,194 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
 
 def book_cps_old_post(url, booking, email, password, dry_run=False, headless=True):
     return book_cps_golf(url, booking, email, password, dry_run=dry_run, headless=headless)
+
+def book_town_of_colonie(url, booking, email, password, dry_run=False, headless=True):
+    """Verified flow for Town of Colonie (CPS Golf via iframe)."""
+    with Stealth().use_sync(sync_playwright()) as p:
+        browser, context = _new_stealth_context(p, headless=headless)
+        page = context.new_page()
+        try:
+            logging.info("Navigating to Town of Colonie URL: %s", url)
+            # Use domcontentloaded instead of networkidle due to heavy background scripts
+            page.goto(url, wait_until='domcontentloaded')
+
+            # --- Target the Iframe ---
+            # All CPS Golf interactions happen inside this embedded frame
+            frame = page.frame_locator('iframe[title="Embedded content"]').first
+            
+            # Wait for the iframe itself to actually load its contents
+            logging.info("Waiting for iframe to load.")
+            page.wait_for_timeout(3000)
+            
+            # --- Auth ---
+            logging.info("Starting authentication inside iframe.")
+            frame.get_by_role('button', name='Sign In').click()
+
+            email_field = frame.get_by_role('textbox', name='Email', exact=True)
+            email_field.wait_for(state='visible', timeout=10000)
+            email_field.fill(email)
+            frame.get_by_role('button', name='NEXT').click()
+
+            pass_field = frame.get_by_role('textbox', name='Password', exact=True)
+            pass_field.wait_for(state='visible', timeout=10000)
+            pass_field.fill(password)
+            frame.get_by_role('button', name='SIGN IN', exact=True).click()
+            
+            logging.info("Sign-in button clicked. Waiting for dashboard.")
+            try:
+                frame.locator('mat-calendar, .booking-container, .tee-sheet-container').first.wait_for(state='visible', timeout=25000)
+            except PlaywrightTimeoutError:
+                page.wait_for_load_state('networkidle', timeout=10000)
+
+            # --- Navigate date (Dialog based) ---
+            logging.info("Navigating to target date: %s", booking.desired_date)
+            try:
+                today = datetime.now()
+                # Use a simpler string-based match for the date label to avoid regex parsing errors in role selectors
+                date_str = f"/{today.day}/{today.strftime('%y')}"
+                logging.info(f"Looking for date textbox containing: {date_str}")
+                
+                # Match anything that ends with /DD/YY (codegen used "/17/26")
+                date_input = frame.get_by_role("textbox").filter(has_text=re.compile(rf'.*{date_str}$')).first
+                
+                if not date_input.is_visible(timeout=3000):
+                    # Second try: target by aria-label if it exists
+                    date_input = frame.locator('input[aria-haspopup="dialog"]').first
+                
+                if not date_input.is_visible(timeout=2000):
+                    # Third try: target by class
+                    date_input = frame.locator('input.mat-input-element').first
+
+                date_input.click(timeout=5000)
+                page.wait_for_timeout(1000)
+                
+                day_str = str(booking.desired_date.day)
+                # Look for the day in the dialog (match Material UI structure)
+                logging.info(f"Selecting day {day_str} from dialog.")
+                
+                # Based on DOM inspection, the days are inside .day-background-upper spans
+                day_button = frame.locator('.day-background-upper:not(.is-disabled)').filter(has_text=re.compile(rf'^{day_str}$')).first
+                
+                # If that fails, try a broader text search within the iframe
+                if not day_button.is_visible(timeout=3000):
+                    day_button = frame.get_by_text(day_str, exact=True).first
+                
+                day_button.wait_for(state='visible', timeout=5000)
+                day_button.click(force=True)
+                logging.info(f"Clicked day {day_str} directly.")
+                page.wait_for_load_state('networkidle', timeout=10000)
+            except Exception as e:
+                raise Exception(f"Failed to navigate to target date {booking.desired_date}: {e}")
+
+            # --- Players & Holes ---
+            logging.info("Selecting %d players and 18 holes.", booking.players)
+            try:
+                frame.get_by_role("button", name=str(booking.players), exact=True).click(force=True, timeout=5000)
+                page.wait_for_timeout(1500)
+                
+                dropdown_arrow = frame.locator('.mat-select-arrow, mat-select[aria-label="Holes"]').first
+                dropdown_arrow.click(force=True)
+                page.wait_for_timeout(1000)
+
+                frame.locator('.cdk-overlay-container, body').get_by_text("18 Holes", exact=True).first.click(force=True)
+                page.wait_for_timeout(2000)
+            except Exception as e:
+                logging.warning("Players/Holes selection failed: %s", e)
+
+            # --- Find tee time in window ---
+            logging.info("Searching for tee time between %s and %s.", booking.earliest_time, booking.latest_time)
+            earliest = parse_time(booking.desired_date, booking.earliest_time)
+            latest = parse_time(booking.desired_date, booking.latest_time)
+            
+            all_buttons = frame.locator('button').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
+            booking_element = None
+            best_time_str = ''
+
+            for btn in all_buttons:
+                txt = btn.inner_text().strip()
+                m = re.search(r'(\d{1,2}:\d{2})\s*([AP])\s*M?', txt, re.IGNORECASE)
+                if m:
+                    ts = f"{m.group(1)}{m.group(2).upper()}M"
+                    try:
+                        avail = datetime.strptime(f"{booking.desired_date.strftime('%Y-%m-%d')} {ts}", '%Y-%m-%d %I:%M%p')
+                        if earliest <= avail <= latest:
+                            booking_element = btn
+                            best_time_str = ts
+                            logging.info("Found matching tee time: %s", best_time_str)
+                            break
+                    except ValueError: continue
+
+            if not booking_element:
+                raise Exception(f'No tee time found between {booking.earliest_time} and {booking.latest_time}')
+
+            if dry_run:
+                return f'Dry run success at {best_time_str}'
+
+            # --- Book & Finalize ---
+            logging.info("Attempting to book tee time: %s", best_time_str)
+
+            # 1. Click tee time until modal opens
+            for attempt in range(5):
+                logging.info(f"Clicking tee time slot (Attempt {attempt + 1})")
+                box = booking_element.bounding_box()
+                if box:
+                    page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                else:
+                    booking_element.click(force=True)
+                
+                try:
+                    frame.get_by_role("button", name=re.compile(r"Next|Continue", re.I)).wait_for(state='visible', timeout=5000)
+                    break
+                except PlaywrightTimeoutError:
+                    page.wait_for_timeout(1500)
+
+            # 2. Sequence through the checkout steps
+            try:
+                # Town of Colonie uses "Next" then "Finalize Reservation"
+                for label in ["Next", "Finalize Reservation"]:
+                    logging.info(f"Looking for button: {label}")
+                    btn = frame.get_by_role("button", name=re.compile(label, re.I))
+                    btn.wait_for(state='visible', timeout=15000)
+                    
+                    clicked = False
+                    for attempt in range(5):
+                        btn.click(force=True)
+                        page.wait_for_timeout(3000)
+                        # For Finalize, check if URL changed or Return button appears
+                        if label == "Finalize Reservation":
+                            if frame.get_by_role('button', name='Return to Tee Times').is_visible(timeout=2000):
+                                clicked = True; break
+                        elif not btn.is_visible():
+                            clicked = True; break
+                    
+                    if not clicked and label == "Finalize Reservation":
+                        logging.warning("Finalize click might have been dead, checking for success indicator.")
+
+                # Verify success
+                return_btn = frame.get_by_role('button', name='Return to Tee Times')
+                try:
+                    if return_btn.is_visible(timeout=15000):
+                        logging.info("Booking confirmed. Clicking 'Return to Tee Times'.")
+                        return_btn.click(timeout=5000)
+                    else:
+                        raise PlaywrightTimeoutError("Success button not found.")
+                except PlaywrightTimeoutError:
+                    if "reservation" in page.url.lower() or "success" in page.url.lower():
+                        logging.info("Success detected via URL.")
+                    else:
+                        raise Exception("Failed to verify booking success.")
+            
+            except PlaywrightTimeoutError as e:
+                raise Exception(f"Checkout sequence timed out: {e}")
+            
+            return f'Success! Booked {best_time_str}'
+
+        except Exception as e:
+            logging.error("Error in book_town_of_colonie: %s", e, exc_info=True)
+            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'town_of_colonie_error.png'))
+            raise
+        finally:
+            browser.close()
 
 # ---------------------------------------------------------------------------
 # ForeUp

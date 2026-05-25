@@ -1,0 +1,67 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - link "Town of Colonie Golf Course" [ref=e7] [cursor=pointer]:
+      - /url: index.html
+      - heading "Town of Colonie Golf Course" [level=2] [ref=e9]
+    - button "Sign In" [ref=e11] [cursor=pointer]:
+      - generic [ref=e12]: Sign In
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic:
+        - generic:
+          - generic [ref=e19]:
+            - heading "Course" [level=5] [ref=e21]
+            - generic [ref=e25] [cursor=pointer]:
+              - img [ref=e27]: golf_course
+              - combobox "Multiple Courses Selected" [ref=e29]:
+                - generic [ref=e33]: Multiple Courses Selected
+            - heading "Date" [level=5] [ref=e36]
+            - generic:
+              - button "<" [disabled] [ref=e38]: <
+              - generic [ref=e42]:
+                - img [ref=e44] [cursor=pointer]: today
+                - generic [ref=e45]:
+                  - textbox "5/17/26" [ref=e46]
+                  - generic:
+                    - generic:
+                      - generic: 5/17/26
+              - button ">" [ref=e48] [cursor=pointer]: ">"
+            - heading "Players" [level=5] [ref=e49]
+            - group "Font Style" [ref=e50]:
+              - button "1" [ref=e51] [cursor=pointer]:
+                - generic [ref=e52]: "1"
+              - button "2" [ref=e53] [cursor=pointer]:
+                - generic [ref=e54]: "2"
+              - button "3" [ref=e55] [cursor=pointer]:
+                - generic [ref=e56]: "3"
+              - button "4" [ref=e57] [cursor=pointer]:
+                - generic [ref=e58]: "4"
+              - button "Any" [pressed] [ref=e59] [cursor=pointer]:
+                - generic [ref=e60]: Any
+            - heading "Time of Day" [level=5] [ref=e61]
+            - generic "ngx-slider" [ref=e65]:
+              - slider "ngx-slider" [ref=e70] [cursor=pointer]
+              - slider "ngx-slider-max" [ref=e71] [cursor=pointer]
+              - generic [ref=e74]: 5 am
+              - generic [ref=e75]: 9 pm+
+            - heading "Holes Selection" [level=5] [ref=e77]
+            - combobox "Any" [ref=e83] [cursor=pointer]:
+              - generic [ref=e86]: Any
+          - paragraph [ref=e93]: No tee times are currently available. Please try different search criteria.
+    - paragraph [ref=e96]:
+      - link "Town of Colonie Golf Course" [ref=e97] [cursor=pointer]:
+        - /url: https://www.colonie.org/departments/parksandrec/golfcourse/
+        - text: Town of Colonie Golf Course
+      - link "418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181" [ref=e98] [cursor=pointer]:
+        - /url: https://maps.google.com/?q=418 Consaul Rd, Schenectady, NY 12304   |   (518) 374-4181
+        - text: 418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181
+      - text: Build No.25.1.9.61297
+      - generic [ref=e101] [cursor=pointer]:
+        - img [ref=e103]: language
+        - combobox "English" [ref=e105]:
+          - generic [ref=e108]: English
+      - link "Powered By" [ref=e111] [cursor=pointer]:
+        - /url: https://www.clubprophetsystems.com/
+        - generic [ref=e112]:
+          - text: Powered By
+          - img [ref=e113]

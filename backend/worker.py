@@ -10,12 +10,27 @@ import playwright_logic
 # Setup Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Ensure the service account key is loaded
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.path.join(os.getcwd(), "service-account.json")
+# Load local service account key if it exists for local testing, otherwise use default credentials
+sa_path = os.path.join(os.getcwd(), "service-account.json")
+if os.path.exists(sa_path):
+    logging.info(f"Using local service account credentials from {sa_path}")
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = sa_path
+    try:
+        import json
+        with open(sa_path, "r") as f:
+            sa_data = json.load(f)
+            project_id = sa_data.get("project_id")
+            if project_id:
+                logging.info(f"Auto-configured GOOGLE_CLOUD_PROJECT to: {project_id}")
+                os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+    except Exception as e:
+        logging.warning(f"Failed to parse service-account.json project ID: {e}")
+else:
+    logging.info("service-account.json not found. Relying on default GCP credentials.")
 
 # Initialize Firestore
 try:
-    db = firestore.Client(project='jeff-gcp-project')
+    db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'jeff-gcp-project'))
 except Exception as e:
     logging.error(f"Failed to connect to Firestore: {e}")
     exit(1)

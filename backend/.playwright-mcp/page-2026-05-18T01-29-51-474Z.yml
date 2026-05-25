@@ -1,0 +1,133 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - link [ref=e299] [cursor=pointer]:
+        - /url: index.html
+        - heading [level=2] [ref=e300]: Town of Colonie Golf Course
+      - button [ref=e301] [cursor=pointer]:
+        - generic [ref=e163]: My Account
+    - generic [ref=e14]:
+      - generic [ref=e15]:
+        - generic [ref=e226]:
+          - heading [level=5] [ref=e302]: Course
+          - generic [ref=e232] [cursor=pointer]:
+            - img [ref=e234]: golf_course
+            - combobox [ref=e303]:
+              - generic [ref=e240]: Multiple Courses Selected
+          - heading [level=5] [ref=e304]: Date
+          - button [disabled] [ref=e305]: <
+          - generic [ref=e249]:
+            - img [ref=e251] [cursor=pointer]: today
+            - generic [ref=e252]:
+              - textbox [active] [ref=e306]
+              - generic:
+                - generic:
+                  - generic: 5/17/26
+          - button [ref=e307] [cursor=pointer]: ">"
+          - heading [level=5] [ref=e308]: Players
+          - group [ref=e309]:
+            - button [ref=e310] [cursor=pointer]:
+              - generic [ref=e259]: "1"
+            - button [ref=e311] [cursor=pointer]:
+              - generic [ref=e261]: "2"
+            - button [ref=e312] [cursor=pointer]:
+              - generic [ref=e263]: "3"
+            - button [ref=e313] [cursor=pointer]:
+              - generic [ref=e265]: "4"
+            - button [pressed] [ref=e314] [cursor=pointer]:
+              - generic [ref=e267]: Any
+          - heading [level=5] [ref=e315]: Time of Day
+          - generic [ref=e316]:
+            - slider [ref=e317] [cursor=pointer]
+            - slider [ref=e318] [cursor=pointer]
+            - generic [ref=e281]: 5 am
+            - generic [ref=e282]: 9 pm+
+          - heading [level=5] [ref=e319]: Holes Selection
+          - combobox [ref=e320] [cursor=pointer]:
+            - generic [ref=e293]: Any
+        - paragraph [ref=e298]: No tee times are currently available. Please try different search criteria.
+      - paragraph [ref=e96]:
+        - link [ref=e321] [cursor=pointer]:
+          - /url: https://www.colonie.org/departments/parksandrec/golfcourse/
+          - text: Town of Colonie Golf Course
+        - link [ref=e322] [cursor=pointer]:
+          - /url: https://maps.google.com/?q=418 Consaul Rd, Schenectady, NY 12304   |   (518) 374-4181
+          - text: 418 Consaul Rd, Schenectady, NY 12304 | (518) 374-4181
+        - text: Build No.25.1.9.61297
+        - generic [ref=e101] [cursor=pointer]:
+          - img [ref=e103]: language
+          - combobox [ref=e323]:
+            - generic [ref=e108]: English
+        - link [ref=e324] [cursor=pointer]:
+          - /url: https://www.clubprophetsystems.com/
+          - generic [ref=e112]:
+            - text: Powered By
+            - img [ref=e113]
+  - generic [ref=e329]:
+    - generic [ref=e333]:
+      - generic [ref=e334]:
+        - generic:
+          - img
+        - generic [ref=e335] [cursor=pointer]: May 2026
+        - generic:
+          - img
+      - generic [ref=e336]:
+        - generic [ref=e337]:
+          - text: Sun
+          - generic [ref=e338]: day
+          - text: Mon
+          - generic [ref=e339]: day
+          - text: Tue
+          - generic [ref=e340]: sday
+          - text: Wed
+          - generic [ref=e341]: nesday
+          - text: Thu
+          - generic [ref=e342]: rsday
+          - text: Fri
+          - generic [ref=e343]: day
+          - text: Sat
+          - generic [ref=e344]: urday
+        - generic [ref=e345]:
+          - generic [ref=e347]: "26"
+          - generic [ref=e350]: "27"
+          - generic [ref=e353]: "28"
+          - generic [ref=e356]: "29"
+          - generic [ref=e359]: "30"
+          - generic [ref=e362]: "1"
+          - generic [ref=e365]: "2"
+          - generic [ref=e368]: "3"
+          - generic [ref=e371]: "4"
+          - generic [ref=e374]: "5"
+          - generic [ref=e377]: "6"
+          - generic [ref=e380]: "7"
+          - generic [ref=e383]: "8"
+          - generic [ref=e386]: "9"
+          - generic [ref=e389]: "10"
+          - generic [ref=e392]: "11"
+          - generic [ref=e395]: "12"
+          - generic [ref=e398]: "13"
+          - generic [ref=e401]: "14"
+          - generic [ref=e404]: "15"
+          - generic [ref=e407]: "16"
+          - generic [ref=e410] [cursor=pointer]: "17"
+          - generic [ref=e413] [cursor=pointer]: "18"
+          - generic [ref=e416] [cursor=pointer]: "19"
+          - generic [ref=e419]: "20"
+          - generic [ref=e422]: "21"
+          - generic [ref=e425]: "22"
+          - generic [ref=e428]: "23"
+          - generic [ref=e431]: "24"
+          - generic [ref=e434]: "25"
+          - generic [ref=e437]: "26"
+          - generic [ref=e440]: "27"
+          - generic [ref=e443]: "28"
+          - generic [ref=e446]: "29"
+          - generic [ref=e449]: "30"
+          - generic [ref=e452]: "31"
+          - generic [ref=e455]: "1"
+          - generic [ref=e458]: "2"
+          - generic [ref=e461]: "3"
+          - generic [ref=e464]: "4"
+          - generic [ref=e467]: "5"
+          - generic [ref=e470]: "6"
+    - button "Today" [ref=e473] [cursor=pointer]: Today

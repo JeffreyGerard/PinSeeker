@@ -6,13 +6,41 @@ from google.cloud import firestore
 import datetime
 import os
 import uuid
+import firebase_admin
+from firebase_admin import credentials, auth
+import threading
+import subprocess
+import sys
 
 # Initialize FastAPI
 app = FastAPI(title="PinSeeker API")
 
+# Load local service account key if it exists for local testing, otherwise use default credentials
+sa_path = os.path.join(os.getcwd(), "service-account.json")
+if os.path.exists(sa_path):
+    print(f"Using local service account credentials from {sa_path}")
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = sa_path
+    try:
+        import json
+        with open(sa_path, "r") as f:
+            sa_data = json.load(f)
+            project_id = sa_data.get("project_id")
+            if project_id:
+                print(f"Auto-configured GOOGLE_CLOUD_PROJECT to: {project_id}")
+                os.environ["GOOGLE_CLOUD_PROJECT"] = project_id
+    except Exception as e:
+        print(f"Warning: Failed to parse service-account.json project ID: {e}")
+else:
+    print("service-account.json not found. Relying on default GCP credentials.")
+
+# Initialize Firebase Admin for authenticating user tokens
+try:
+    firebase_admin.get_app()
+except ValueError:
+    # Uses default credentials automatically on Cloud Run or via environment variables locally
+    firebase_admin.initialize_app()
+
 # Initialize Firestore
-# Note: Cloud Run automatically handles authentication if the service account is configured correctly.
-# If running locally for testing, ensure GOOGLE_APPLICATION_CREDENTIALS is set.
 try:
     db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'jeff-gcp-project'))
 except Exception as e:
@@ -32,11 +60,20 @@ class BookingRequest(BaseModel):
     course_email: str = Field(default="", description="Optional course login email")
     course_password: str = Field(default="", description="Optional course login password")
 
+def verify_firebase_token(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    id_token = auth_header.split("Bearer ")[-1]
+    try:
+        decoded_token = auth.verify_id_token(id_token)
+        return decoded_token
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Invalid authentication token: {e}")
+
 @app.get("/api/bookings")
-async def list_bookings(passcode: str = ""):
-    EXPECTED_PASSCODE = os.getenv("APP_PASSCODE", "golf2026")
-    if passcode != EXPECTED_PASSCODE:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+async def list_bookings(request: Request):
+    verify_firebase_token(request)
     
     if not db:
         return []
@@ -51,11 +88,8 @@ async def list_bookings(passcode: str = ""):
         return []
 
 @app.post("/api/bookings", status_code=201)
-async def create_booking(request: BookingRequest):
-    # Simple stateless authentication
-    EXPECTED_PASSCODE = os.getenv("APP_PASSCODE", "golf2026")
-    if request.passcode != EXPECTED_PASSCODE:
-        raise HTTPException(status_code=401, detail="Unauthorized: Invalid Passcode")
+async def create_booking(booking_request: BookingRequest, request: Request):
+    user = verify_firebase_token(request)
 
     if not db:
         raise HTTPException(status_code=500, detail="Database connection not available")
@@ -67,17 +101,18 @@ async def create_booking(request: BookingRequest):
     job_data = {
         "id": job_id,
         "status": "PENDING",
-        "course": request.course,
-        "course_name": request.course_name,
-        "desired_date": request.desired_date,
-        "earliest_time": request.earliest_time,
-        "latest_time": request.latest_time,
-        "players": request.players,
-        "release_time": request.release_time,
-        "course_email": request.course_email,
-        "course_password": request.course_password,
+        "course": booking_request.course,
+        "course_name": booking_request.course_name,
+        "desired_date": booking_request.desired_date,
+        "earliest_time": booking_request.earliest_time,
+        "latest_time": booking_request.latest_time,
+        "players": booking_request.players,
+        "release_time": booking_request.release_time,
+        "course_email": booking_request.course_email,
+        "course_password": booking_request.course_password,
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
+        "uid": user["uid"]
     }
 
     try:
@@ -88,6 +123,63 @@ async def create_booking(request: BookingRequest):
     except Exception as e:
         print(f"Firestore error: {e}")
         raise HTTPException(status_code=500, detail="Failed to save booking request")
+
+def run_worker_in_background(job_id):
+    """Run the worker.py script inside a background thread to prevent blocking FastAPI request."""
+    try:
+        import sys
+        subprocess.run([sys.executable, "worker.py", "--debug-job", job_id], check=True)
+    except Exception as e:
+        print(f"Background worker execution error: {e}")
+
+@app.get("/api/cron")
+async def trigger_cron():
+    """Scan Firestore for PENDING bookings that need to release soon (in the next 75 seconds)
+
+    and trigger them in the background.
+    """
+    if not db:
+        return {"status": "error", "message": "Database not initialized"}
+        
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    triggered_jobs = []
+    
+    try:
+        # Check PENDING jobs
+        jobs_ref = db.collection('tee_time_jobs').where('status', '==', 'PENDING')
+        docs = jobs_ref.stream()
+        
+        for doc in docs:
+            job_data = doc.to_dict()
+            release_time_str = job_data.get('release_time')
+            if not release_time_str:
+                continue
+                
+            release_time = datetime.datetime.fromisoformat(release_time_str)
+            time_until_release = (release_time - now_utc).total_seconds()
+            
+            # If the job releases in the next 75 seconds and has not started, trigger it
+            if 0 < time_until_release <= 75:
+                job_id = doc.id
+                print(f"Cron detected imminent job {job_id} releasing in {time_until_release:.2f} seconds. Triggering...")
+                
+                # Run worker.py in a background thread to let FastAPI respond immediately
+                t = threading.Thread(target=run_worker_in_background, args=(job_id,))
+                t.start()
+                triggered_jobs.append(job_id)
+                
+            # Clean up stale jobs that were missed (more than 2 minutes in the past)
+            elif time_until_release <= -120:
+                print(f"Cron marking stale job {doc.id} as FAILED (Missed release window).")
+                db.collection('tee_time_jobs').document(doc.id).update({
+                    "status": "FAILED",
+                    "result_log": "Missed release window (bot was not running or scheduler failed)",
+                    "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
+                })
+                
+        return {"status": "success", "triggered_jobs": triggered_jobs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Exception handler for serving the React SPA (catch-all for frontend routing)
 @app.exception_handler(404)

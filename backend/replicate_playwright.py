@@ -55,7 +55,7 @@ COURSE_HANDLERS = {
     },
     "town_of_colonie": {
         "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
-        "func": playwright_logic.book_cps_golf,
+        "func": playwright_logic.book_town_of_colonie,
     },
     "van_patten": {
         "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
