@@ -207,7 +207,7 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
                     except PlaywrightTimeoutError:
                         if attempt == 5:
                             screenshot_path = os.path.join(SCREENSHOT_DIR, 'modal_fail_debug.png')
-                            page.screenshot(path=screenshot_path)
+                            page.screenshot(path=screenshot_path, timeout=5000, animations="disabled")
                             logging.warning(f"Modal failed to open after all attempts. Saved debug screenshot to {screenshot_path}")
                         page.wait_for_timeout(2000)
                         continue
@@ -282,7 +282,7 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
 
         except Exception as e:
             logging.error("An error occurred in book_cps_golf: %s", e, exc_info=True)
-            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'cps_golf_error.png'))
+            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'cps_golf_error.png'), timeout=5000, animations="disabled")
             raise
         finally:
             browser.close()
@@ -632,18 +632,18 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
                     except Exception as e:
                         logging.warning(f"Could not handle 'Pay At Facility': {e}")
                 
-                # Wait for final success message
-                page.wait_for_timeout(5000) 
+                # Wait briefly for the action to process
+                page.wait_for_timeout(3000)
             else:
                 logging.info("DRY RUN: Skipping final click.")
             
-            return f'Success! Attempted booking for {best_time_str}'
+            return f'Success! Attempted booking for {best_time_str}.'
 
             
 
         except Exception as e:
             logging.error("An error occurred in book_via_foreup_software: %s", e, exc_info=True)
-            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'foreup_error.png'))
+            page.screenshot(path=os.path.join(SCREENSHOT_DIR, 'foreup_error.png'), animations="disabled")
             raise
         finally:
             browser.close()

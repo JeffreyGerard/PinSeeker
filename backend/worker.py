@@ -2,6 +2,8 @@ import time
 import datetime
 import os
 import logging
+import argparse
+import sys
 from google.cloud import firestore
 
 # Import the user's Playwright logic
@@ -30,27 +32,60 @@ else:
 
 # Initialize Firestore
 try:
-    db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'jeff-gcp-project'))
+    db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'pinseeker-app'))
 except Exception as e:
     logging.error(f"Failed to connect to Firestore: {e}")
     exit(1)
 
 # Compatibility Wrapper
 class BookingWrapper:
-    """Wraps Firestore dictionary data to act like the Django model expected by playwright_logic"""
+    """Wraps Firestore dictionary data to act like the object expected by playwright_logic"""
     def __init__(self, data):
         self.desired_date = datetime.date.fromisoformat(data['desired_date'])
-        
-        # playwright_logic parse_time expects string times in %H:%M:%S format to convert to objects later, 
-        # or it expects time objects. The logic uses datetime.combine(date_obj, time_obj)
-        # So we convert the string '07:00:00' to a datetime.time object
         self.earliest_time = datetime.time.fromisoformat(data['earliest_time'])
         self.latest_time = datetime.time.fromisoformat(data['latest_time'])
-        
         self.players = int(data['players'])
         self.course_name = data.get('course_name')
 
-import argparse
+# Course Configuration Map - Synchronized with replicate_playwright.py
+COURSE_CONFIG = {
+    "capital hills": {
+        "url": "https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
+        "func": playwright_logic.book_cps_golf,
+    },
+    "eagle crest": {
+        "url": "https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101",
+        "func": playwright_logic.book_via_eagleclub,
+    },
+    "fairways": {
+        "url": "https://foreupsoftware.com/index.php/booking/22948/12410#/welcome",
+        "func": playwright_logic.book_fairways_halfmoon,
+    },
+    "post road": {
+        "url": "https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
+        "func": playwright_logic.book_cps_old_post,
+    },
+    "orchard creek": {
+        "url": "https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes",
+        "func": playwright_logic.book_orchard_creek,
+    },
+    "schenectady": {
+        "url": "https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes",
+        "func": playwright_logic.book_schenectady_muni,
+    },
+    "stadium": {
+        "url": "https://foreupsoftware.com/index.php/booking/index/3332#teetimes",
+        "func": playwright_logic.book_stadium,
+    },
+    "colonie": {
+        "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
+        "func": playwright_logic.book_town_of_colonie,
+    },
+    "van patten": {
+        "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
+        "func": playwright_logic.book_van_patten,
+    }
+}
 
 def execute_booking(job_id, job_data, dry_run=False):
     logging.info(f"Executing Snipe for Job {job_id} at {job_data['course_name']} (Dry Run: {dry_run})")
@@ -64,36 +99,24 @@ def execute_booking(job_id, job_data, dry_run=False):
 
     # 2. Prepare the data wrapper
     booking = BookingWrapper(job_data)
-    course_name = job_data.get('course_name', '').lower()
-
-
+    course_query = job_data.get('course_name', '').lower()
     
     email = job_data.get('course_email', 'user@example.com')
     password = job_data.get('course_password', 'password123')
 
     try:
-        logging.info(f"Routing to correct booking function for: {course_name}")
-        result_message = ""
-
         # 3. The Course Router
-        if "capital hills" in course_name:
-            result_message = playwright_logic.book_cps_golf("https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225", booking, email, password, dry_run=dry_run)
-        elif "post road" in course_name:
-            result_message = playwright_logic.book_cps_old_post("https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225", booking, email, password, dry_run=dry_run)
-        elif "orchard creek" in course_name:
-            result_message = playwright_logic.book_orchard_creek("https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes", booking, email, password, dry_run=dry_run)
-        elif "schenectady" in course_name:
-            result_message = playwright_logic.book_schenectady_muni("https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes", booking, email, password, dry_run=dry_run)
-        elif "fairways" in course_name:
-            result_message = playwright_logic.book_fairways_halfmoon("https://foreupsoftware.com/index.php/booking/22948/12410#/welcome", booking, email, password, dry_run=dry_run)
-        elif "stadium" in course_name:
-            result_message = playwright_logic.book_stadium("https://foreupsoftware.com/index.php/booking/index/3332#teetimes", booking, email, password, dry_run=dry_run)
-        elif "van patten" in course_name:
-            result_message = playwright_logic.book_van_patten("https://foreupsoftware.com/index.php/booking/19765/2544", booking, email, password, dry_run=dry_run)
-        elif "eagle crest" in course_name:
-            result_message = playwright_logic.book_via_eagleclub("https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101", booking, email, password, dry_run=dry_run)
-        else:
-            raise Exception(f"No routing logic found for course: {course_name}")
+        handler = None
+        for key, config in COURSE_CONFIG.items():
+            if key in course_query:
+                handler = config
+                break
+        
+        if not handler:
+            raise Exception(f"No routing logic found for course: {course_query}")
+
+        logging.info(f"Routing to {handler['func'].__name__} with URL: {handler['url']}")
+        result_message = handler["func"](handler["url"], booking, email, password, dry_run=dry_run)
 
         # 4. If successful:
         logging.info(f"Booking Automation Successful! Result: {result_message}")
