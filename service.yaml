@@ -1,0 +1,70 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: pinseeker
+  annotations:
+    run.googleapis.com/launch-stage: BETA
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containers:
+      # --- Main PinSeeker Application Container ---
+      - image: gcr.io/jeff-gcp-project/pinseeker:latest
+        name: pinseeker-app
+        ports:
+        - containerPort: 8080
+        resources:
+          limits:
+            memory: 2Gi
+            cpu: "2"
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /app/service-account.json
+        - name: GOOGLE_CLOUD_PROJECT
+          value: pinseeker-app
+        - name: ENCRYPTION_KEY
+          value: YOUR_FERNET_ENCRYPTION_KEY_HERE
+        - name: PLAYWRIGHT_PROXY_SERVER
+          value: socks5://100.113.62.1:1080
+        - name: PLAYWRIGHT_PROXY_USERNAME
+          value: jgerard
+        - name: PLAYWRIGHT_PROXY_PASSWORD
+          value: Password101
+        - name: VITE_FIREBASE_API_KEY
+          value: AIzaSyDCJMf7UZUZhUbCfquUlsGL52koBAbwh68
+        - name: VITE_FIREBASE_AUTH_DOMAIN
+          value: pinseeker-app.firebaseapp.com
+        - name: VITE_FIREBASE_PROJECT_ID
+          value: pinseeker-app
+        - name: VITE_FIREBASE_STORAGE_BUCKET
+          value: pinseeker-app.firebasestorage.app
+        - name: VITE_FIREBASE_MESSAGING_SENDER_ID
+          value: "1073365021484"
+        - name: VITE_FIREBASE_APP_ID
+          value: 1:1073365021484:web:c962517364394539af3289"
+        volumeMounts:
+        - name: sa-key
+          mountPath: /app/service-account.json
+          subPath: service-account.json
+
+      # --- Tailscale Network Bridge Container ---
+      - image: docker.io/tailscale/tailscale:latest
+        name: tailscale
+        env:
+        - name: TAILSCALE_AUTHKEY
+          value: tskey-auth-YOUR_TAILSCALE_EPHEMERAL_KEY
+        securityContext:
+          capabilities:
+            add:
+            - NET_ADMIN
+
+      volumes:
+      - name: sa-key
+        secret:
+          secretName: pinseeker-sa-key
+          items:
+          - key: latest
+            path: service-account.json
