@@ -18,13 +18,13 @@ app = FastAPI(title="PinSeeker API")
 
 # Helper to create Cloud Task
 def schedule_booking_task(job_id, release_time_iso):
-    project = os.getenv('GOOGLE_CLOUD_PROJECT')
+    project = os.getenv('TASKS_PROJECT') or os.getenv('GOOGLE_CLOUD_PROJECT')
     queue = os.getenv('CLOUD_TASKS_QUEUE', 'pinseeker-queue')
     location = os.getenv('CLOUD_TASKS_LOCATION', 'us-east1')
     service_url = os.getenv('BASE_URL') # e.g. https://pinseeker-xxx.a.run.app
     
     if not all([project, service_url]):
-        print("Skipping Cloud Task creation: GOOGLE_CLOUD_PROJECT or BASE_URL not set.")
+        print("Skipping Cloud Task creation: GOOGLE_CLOUD_PROJECT/TASKS_PROJECT or BASE_URL not set.")
         return None
 
     client = tasks_v2.CloudTasksClient()

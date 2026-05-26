@@ -1,8 +1,8 @@
-# ☁️ GCP Cloud Run Deployment Guide (Tailscale Secure Tunnel)
+# ☁️ GCP Cloud Run Deployment Guide (Tailscale Userspace Exit Node)
 
-This guide covers deploying the PinSeeker application to **Google Cloud Run** inside your hosting project (**`jeff-gcp-project`**), while securely connecting to your database/auth in your Firebase project (**`pinseeker-app`**) and bridging the connection to your private home Raspberry Pi SOCKS5 proxy using **Tailscale**.
+This guide covers deploying the PinSeeker application to **Google Cloud Run** inside your hosting project (**`jeff-gcp-project`**), securely connecting to your database/auth in your Firebase project (**`pinseeker-app`**), and routing all automation traffic through your private home Raspberry Pi SOCKS5 proxy using **Tailscale Userspace Networking**.
 
-Because you are using Tailscale to secure your Raspberry Pi, Cloud Run requires a **Tailscale sidecar container** to join your private tailnet and communicate with your SOCKS5 proxy at `100.113.62.1:1080` securely.
+Because Cloud Run does not support custom security capabilities (like `NET_ADMIN` needed to create tun/tap devices), **Tailscale runs directly inside your PinSeeker container in userspace mode**, exposing a local SOCKS5 proxy on `localhost:1055`. It then tunnels all traffic going into that proxy to your home Raspberry Pi.
 
 ---
 
@@ -13,7 +13,7 @@ Headless browser automation (Playwright/Chromium) is resource-intensive. If the 
 ### Recommended Container Sizing
 * **Memory**: 🔲 **2 GiB** (Minimum required for single Playwright executions). Set to **4 GiB** if scheduling multiple parallel snipes.
 * **CPU**: ⚡ **2 vCPUs** (Ensures pages load quickly, JavaScript evaluates dynamically, and interactions are snappy).
-* **Scaling**: 📉 **Min Instances: 0** (Scales down to absolute zero when idle, costing $0.00). **Max Instances: 5** (Limits concurrency to protect your proxy and database).
+* **Scaling**: 📉 **Min Instances: 0** (Scales down to absolute zero when idle, costing $0.00). **Max Instances: 5** (Limits concurrency to protect your database).
 
 ---
 
@@ -36,25 +36,31 @@ gcloud secrets create pinseeker-sa-key --data-file="/Users/jeffgerard/Projects/P
 
 ---
 
-## 🔑 2. Generate a Tailscale Auth Key
+## 🔑 2. Configure Your Tailscale Exit Node (Raspberry Pi)
 
-To let the Cloud Run sidecar container connect to your private Tailscale network automatically:
-1. Open the [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys).
-2. Go to **Settings -> Keys**.
-3. Click **Generate Auth Key**.
-4. Configure the key:
-   - Check **Ephemeral** (this automatically deletes the device from your admin list when the container shuts down).
-   - Check **Reusable** (so multiple container instances can use it).
-5. Click **Generate** and copy the printed key (it starts with `tskey-auth-...`).
+To route all Cloud Run automation requests through your home residential IP, your Raspberry Pi must act as a **Tailscale Exit Node**.
+
+1. **Advertise the Pi as an Exit Node**:
+   Log into your Raspberry Pi terminal (SSH) and run:
+   ```bash
+   sudo tailscale up --advertise-exit-node
+   ```
+2. **Approve the Exit Node in the Console**:
+   - Go to your [Tailscale Admin Machines Console](https://login.tailscale.com/admin/machines).
+   - Find your Raspberry Pi in the list, click the **Three Dots (...)** -> **Edit Route Settings**.
+   - Check the box under **Use as exit node** and click Save.
 
 ---
 
-## 📄 3. Configure the `service.yaml` file
+## 🔑 3. Generate a Tailscale Auth Key
 
-In the root of your repository, we have created a **`service.yaml`** configuration template. Open this file and replace the placeholders:
-
-1. **`YOUR_FERNET_ENCRYPTION_KEY_HERE`**: Replace with your Fernet encryption key.
-2. **`tskey-auth-YOUR_TAILSCALE_EPHEMERAL_KEY`**: Replace with your actual Tailscale Auth Key generated in Section 2.
+To let your Cloud Run container connect to your private Tailscale network automatically:
+1. Open the [Tailscale Admin Keys Console](https://login.tailscale.com/admin/settings/keys).
+2. Click **Generate Auth Key**.
+3. Configure the key:
+   - Check **Ephemeral** (automatically deletes the temporary container from your device list when it scales down to 0).
+   - Check **Reusable** (so multiple containers can scale up using it).
+4. Click **Generate** and copy the printed key (it starts with `tskey-auth-...`).
 
 ---
 
@@ -67,18 +73,41 @@ gcloud config set project jeff-gcp-project
 ```
 
 ### Step A: Build & Push the PinSeeker App Image
-Run this command from your project root to build and upload your container to the Google Container Registry:
+Run this command from your project root to build and upload your container (which now automatically installs Tailscale and packages `start.sh`):
 
 ```bash
 gcloud builds submit --tag gcr.io/jeff-gcp-project/pinseeker:latest .
 ```
 
-### Step B: Deploy the Multi-Container Service
-Deploy both the PinSeeker app container and the Tailscale sidecar container using the `service.yaml` configuration file:
+### Step B: Deploy to Cloud Run
+Deploy using the standard `gcloud run deploy` command, injecting your credentials and Tailscale keys. Because Tailscale runs inside the container, **no special YAML or beta features are required!**
 
 ```bash
-gcloud beta run services replace service.yaml
+gcloud run deploy pinseeker \
+  --image gcr.io/jeff-gcp-project/pinseeker:latest \
+  --platform managed \
+  --region us-east1 \
+  --memory 2Gi \
+  --cpu 2 \
+  --min-instances 0 \
+  --max-instances 5 \
+  --allow-unauthenticated \
+  --update-secrets="/secrets/service-account.json=pinseeker-sa-key:latest" \
+  --set-env-vars="GOOGLE_APPLICATION_CREDENTIALS=/secrets/service-account.json" \
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=pinseeker-app" \
+  --set-env-vars="ENCRYPTION_KEY=YOUR_FERNET_ENCRYPTION_KEY_HERE" \
+  --set-env-vars="TAILSCALE_AUTHKEY=tskey-auth-YOUR_TAILSCALE_EPHEMERAL_KEY" \
+  --set-env-vars="TAILSCALE_EXIT_NODE=100.113.62.1" \
+  --set-env-vars="PLAYWRIGHT_PROXY_SERVER=socks5://localhost:1055" \
+  --set-env-vars="VITE_FIREBASE_API_KEY=AIzaSyDCJMf7UZUZhUbCfquUlsGL52koBAbwh68" \
+  --set-env-vars="VITE_FIREBASE_AUTH_DOMAIN=pinseeker-app.firebaseapp.com" \
+  --set-env-vars="VITE_FIREBASE_PROJECT_ID=pinseeker-app" \
+  --set-env-vars="VITE_FIREBASE_STORAGE_BUCKET=pinseeker-app.firebasestorage.app" \
+  --set-env-vars="VITE_FIREBASE_MESSAGING_SENDER_ID=1073365021484" \
+  --set-env-vars="VITE_FIREBASE_APP_ID=1:1073365021484:web:c962517364394539af3289"
 ```
+
+*Note: In this setup, we set `PLAYWRIGHT_PROXY_SERVER=socks5://localhost:1055`. All of Playwright's proxy requests go to Tailscale, which automatically tunnels them to your Pi and exits through your home IP. No credentials or ports need to be configured for Playwright!*
 
 ---
 
@@ -105,5 +134,3 @@ We will configure a Cloud Scheduler job to hit `/api/cron` every minute. When hi
      --time-zone="America/New_York" \
      --description="Trigger PinSeeker release scan every minute"
    ```
-
-This configuration ensures PinSeeker operates fully serverless. You pay nothing during the day when no bookings are active, but the service wakes up exactly on target to book your tee times, routing through your home Raspberry Pi seamlessly!
