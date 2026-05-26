@@ -26,7 +26,7 @@ spec:
         - name: GOOGLE_CLOUD_PROJECT
           value: pinseeker-app
         - name: ENCRYPTION_KEY
-          value: YOUR_FERNET_ENCRYPTION_KEY_HERE
+          value: q1baP6MQzA6uruurBC2cFeUN0xsi0g6isM83Or9Ujxo=
         - name: PLAYWRIGHT_PROXY_SERVER
           value: socks5://100.113.62.1:1080
         - name: PLAYWRIGHT_PROXY_USERNAME
@@ -55,7 +55,7 @@ spec:
         name: tailscale
         env:
         - name: TAILSCALE_AUTHKEY
-          value: tskey-auth-YOUR_TAILSCALE_EPHEMERAL_KEY
+          value: tskey-auth-kFU73pjUVY11CNTRL-utXZxG9nxh7BTxD56ivbh7tYTv4FKsqBS
         securityContext:
           capabilities:
             add:
