@@ -18,12 +18,21 @@ ENV PORT 8080
 
 WORKDIR /app
 
+# Install system dependencies for Playwright
+RUN apt-get update && apt-get install -y \
+    wget \
+    gnupg \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy python dependencies
 COPY backend/requirements-fastapi.txt .
 RUN pip install --no-cache-dir -r requirements-fastapi.txt
 
-# Copy FastAPI app code
-COPY backend/main.py .
+# Install Playwright browsers (and their system deps)
+RUN playwright install --with-deps chromium
+
+# Copy all backend code (main.py, worker.py, playwright_logic.py, utils.py)
+COPY backend/ ./
 
 # Copy built React assets from the frontend builder stage
 # main.py expects a folder named 'dist'

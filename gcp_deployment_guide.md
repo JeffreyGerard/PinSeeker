@@ -31,9 +31,28 @@ Use Google Cloud Build to compile and build your unified React + FastAPI contain
 gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/pinseeker:latest .
 ```
 
-### 2. Deploy to Cloud Run
+### 2. Setup Cloud Tasks Queue
 
-Deploy the container using the command below, which configures the recommended sizing, sets minimum instances to 0, and enables scale-to-zero:
+PinSeeker uses Cloud Tasks to trigger the booking bot exactly 60 seconds before the release time.
+
+```bash
+# Create the queue
+gcloud tasks queues create pinseeker-queue --location=us-east1
+
+# Create a service account for Cloud Tasks to trigger Cloud Run
+gcloud iam service-accounts create pinseeker-task-sa \
+    --display-name="PinSeeker Task Runner"
+
+# Grant the service account permission to invoke Cloud Run
+gcloud run services add-iam-policy-binding pinseeker \
+    --member="serviceAccount:pinseeker-task-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+    --role="roles/run.invoker" \
+    --region=us-east1
+```
+
+### 3. Deploy to Cloud Run
+
+Deploy the container using the command below. Note the `BASE_URL` and `TASK_SERVICE_ACCOUNT_EMAIL` variables which are required for scheduling.
 
 ```bash
 gcloud run deploy pinseeker \
@@ -46,6 +65,8 @@ gcloud run deploy pinseeker \
   --max-instances 5 \
   --allow-unauthenticated \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=YOUR_PROJECT_ID" \
+  --set-env-vars="BASE_URL=https://pinseeker-abcdef-ue.a.run.app" \
+  --set-env-vars="TASK_SERVICE_ACCOUNT_EMAIL=pinseeker-task-sa@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --set-env-vars="ENCRYPTION_KEY=YOUR_FERNET_ENCRYPTION_KEY" \
   --set-env-vars="PLAYWRIGHT_PROXY_SERVER=http://yourpi-ip-or-dns:port" \
   --set-env-vars="PLAYWRIGHT_PROXY_USERNAME=proxyuser" \
@@ -58,33 +79,26 @@ gcloud run deploy pinseeker \
   --set-env-vars="VITE_FIREBASE_APP_ID=APP_ID"
 ```
 
-> [!NOTE]
-> Make sure to replace `YOUR_PROJECT_ID` with your actual Google Cloud Project ID, and supply your custom encryption key and proxy credentials.
+> [!TIP]
+> After your first deployment, run `gcloud run services describe pinseeker --region us-east1 --format="value(status.url)"` to get your actual URL and re-deploy with the correct `BASE_URL`.
 
 ---
 
-## ⏰ Automated Cron Triggering (Cloud Scheduler)
+## ⏰ Background Cleanup (Cloud Scheduler)
 
-Since the Cloud Run service scales down to 0 to save money, it cannot run background threads that sleep and wake up to run booking snipes. Instead, we use **Cloud Scheduler** to wake up the service exactly when needed.
+While Cloud Tasks handles the precise execution of bookings, we still use a low-frequency **Cloud Scheduler** job to clean up any "stale" jobs (e.g., if a task was deleted or failed silently).
 
-We will configure a Cloud Scheduler job to hit `/api/cron` every minute. When hit, the FastAPI endpoint queries Firestore. If a tee time booking has an upcoming release window (releasing in the next 60 seconds), the service stays active to launch a background thread and complete the snipe before scaling back to 0.
+We configure this to run once an hour (or every 15 minutes) to hit `/api/cron`.
 
-### Create the Scheduler Job
+### Create the Cleanup Job
 
-1. **Get your Cloud Run Service URL**:
-   ```bash
-   gcloud run services describe pinseeker --region us-east1 --format="value(status.url)"
-   ```
-   Assume this returns `https://pinseeker-abcdef-ue.a.run.app`.
-
-2. **Create the Cloud Scheduler Cron**:
-   ```bash
-   gcloud scheduler jobs create http pinseeker-minute-cron \
-     --schedule="* * * * *" \
-     --uri="https://pinseeker-abcdef-ue.a.run.app/api/cron" \
-     --http-method=GET \
-     --time-zone="America/New_York" \
-     --description="Trigger PinSeeker release scan every minute"
-   ```
+```bash
+gcloud scheduler jobs create http pinseeker-cleanup \
+  --schedule="*/15 * * * *" \
+  --uri="https://pinseeker-abcdef-ue.a.run.app/api/cron" \
+  --http-method=GET \
+  --time-zone="America/New_York" \
+  --description="Cleanup stale PinSeeker jobs"
+```
 
 This configuration ensures PinSeeker operates fully serverless. You pay nothing during the day when no bookings are active, but the service wakes up exactly on target to book your tee times, routing through your home Raspberry Pi seamlessly!

@@ -2,7 +2,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
-from google.cloud import firestore
+from google.cloud import firestore, tasks_v2
+from google.protobuf import timestamp_pb2
 import datetime
 import os
 import uuid
@@ -14,6 +15,54 @@ import sys
 
 # Initialize FastAPI
 app = FastAPI(title="PinSeeker API")
+
+# Helper to create Cloud Task
+def schedule_booking_task(job_id, release_time_iso):
+    project = os.getenv('GOOGLE_CLOUD_PROJECT')
+    queue = os.getenv('CLOUD_TASKS_QUEUE', 'pinseeker-queue')
+    location = os.getenv('CLOUD_TASKS_LOCATION', 'us-east1')
+    service_url = os.getenv('BASE_URL') # e.g. https://pinseeker-xxx.a.run.app
+    
+    if not all([project, service_url]):
+        print("Skipping Cloud Task creation: GOOGLE_CLOUD_PROJECT or BASE_URL not set.")
+        return None
+
+    client = tasks_v2.CloudTasksClient()
+    parent = client.queue_path(project, location, queue)
+    
+    # Schedule for 60 seconds before release
+    release_time = datetime.datetime.fromisoformat(release_time_iso)
+    schedule_time = release_time - datetime.timedelta(seconds=60)
+    
+    # Cloud Tasks requires a timestamp in the future. 
+    # If release is very soon, schedule for 'now'
+    now = datetime.datetime.now(datetime.timezone.utc)
+    if schedule_time < now:
+        schedule_time = now + datetime.timedelta(seconds=5)
+
+    timestamp = timestamp_pb2.Timestamp()
+    timestamp.FromDatetime(schedule_time)
+    
+    task = {
+        "http_request": {
+            "http_method": tasks_v2.HttpMethod.POST,
+            "url": f"{service_url.rstrip('/')}/api/execute-job",
+            "headers": {"Content-Type": "application/json"},
+            "body": f'{{"job_id": "{job_id}"}}'.encode(),
+            "oidc_token": {
+                "service_account_email": os.getenv('TASK_SERVICE_ACCOUNT_EMAIL')
+            }
+        },
+        "schedule_time": timestamp
+    }
+    
+    try:
+        response = client.create_task(parent=parent, task=task)
+        print(f"Created Cloud Task: {response.name}")
+        return response.name
+    except Exception as e:
+        print(f"Failed to create Cloud Task: {e}")
+        return None
 
 # Load local service account key if it exists for local testing, otherwise use default credentials
 sa_path = os.path.join(os.getcwd(), "service-account.json")
@@ -119,30 +168,55 @@ async def create_booking(booking_request: BookingRequest, request: Request):
         # Write to Firestore collection 'tee_time_jobs'
         doc_ref = db.collection('tee_time_jobs').document(job_id)
         doc_ref.set(job_data)
+
+        # Schedule a Cloud Task for event-driven execution
+        schedule_booking_task(job_id, booking_request.release_time)
+
         return {"status": "success", "job_id": job_id, "message": "Booking request queued."}
     except Exception as e:
         print(f"Firestore error: {e}")
         raise HTTPException(status_code=500, detail="Failed to save booking request")
 
-def run_worker_in_background(job_id):
-    """Run the worker.py script inside a background thread to prevent blocking FastAPI request."""
+class ExecuteJobRequest(BaseModel):
+    job_id: str
+
+@app.post("/api/execute-job")
+async def execute_job(req: ExecuteJobRequest):
+    """Called by Cloud Tasks to execute a specific booking job."""
+    if not db:
+        raise HTTPException(status_code=500, detail="Database not initialized")
+    
+    doc_ref = db.collection('tee_time_jobs').document(req.job_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    job_data = doc.to_dict()
+    
+    # Import execute_booking from worker.py
+    # We do this inside the function to avoid circular imports or early initialization issues
+    from worker import execute_booking
+    
+    # We run it synchronously here so Cloud Run stays active until it finishes.
+    # Cloud Tasks will wait for the response.
     try:
-        import sys
-        subprocess.run([sys.executable, "worker.py", "--debug-job", job_id], check=True)
+        execute_booking(req.job_id, job_data)
+        return {"status": "success", "job_id": req.job_id}
     except Exception as e:
-        print(f"Background worker execution error: {e}")
+        print(f"Execution error: {e}")
+        # Returning a non-2xx would cause Cloud Tasks to retry. 
+        # For now we return 200 but the job status in Firestore will be FAILED.
+        return {"status": "failed", "error": str(e)}
 
 @app.get("/api/cron")
 async def trigger_cron():
-    """Scan Firestore for PENDING bookings that need to release soon (in the next 75 seconds)
-
-    and trigger them in the background.
-    """
+    """Cleanup stale jobs (Missed release windows)."""
     if not db:
         return {"status": "error", "message": "Database not initialized"}
         
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    triggered_jobs = []
+    cleaned_jobs = []
     
     try:
         # Check PENDING jobs
@@ -158,26 +232,17 @@ async def trigger_cron():
             release_time = datetime.datetime.fromisoformat(release_time_str)
             time_until_release = (release_time - now_utc).total_seconds()
             
-            # If the job releases in the next 75 seconds and has not started, trigger it
-            if 0 < time_until_release <= 75:
-                job_id = doc.id
-                print(f"Cron detected imminent job {job_id} releasing in {time_until_release:.2f} seconds. Triggering...")
-                
-                # Run worker.py in a background thread to let FastAPI respond immediately
-                t = threading.Thread(target=run_worker_in_background, args=(job_id,))
-                t.start()
-                triggered_jobs.append(job_id)
-                
-            # Clean up stale jobs that were missed (more than 2 minutes in the past)
-            elif time_until_release <= -120:
+            # Clean up stale jobs that were missed (more than 5 minutes in the past)
+            if time_until_release <= -300:
                 print(f"Cron marking stale job {doc.id} as FAILED (Missed release window).")
                 db.collection('tee_time_jobs').document(doc.id).update({
                     "status": "FAILED",
                     "result_log": "Missed release window (bot was not running or scheduler failed)",
                     "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
                 })
+                cleaned_jobs.append(doc.id)
                 
-        return {"status": "success", "triggered_jobs": triggered_jobs}
+        return {"status": "success", "cleaned_jobs": cleaned_jobs}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
