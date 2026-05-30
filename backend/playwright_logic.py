@@ -1,6 +1,6 @@
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 import re
 import logging
@@ -19,6 +19,57 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def parse_time(date_obj, time_obj):
     """Combine a date object and a time object into a datetime object."""
     return datetime.combine(date_obj, time_obj)
+
+
+def wait_for_release(release_time_str, lead_seconds=1.0):
+    """
+    Precision wait loop to synchronize execution with the exact release time.
+    Calculates time difference and coarse-sleeps, then fine-sleeps/busy-waits.
+    """
+    if not release_time_str:
+        logging.info("Precision Sync: No release_time provided, executing immediately.")
+        return
+        
+    try:
+        # Normalize ISO 8601 'Z' suffix to '+00:00' for Python compatibility
+        if release_time_str.endswith('Z'):
+            release_time_str = release_time_str[:-1] + '+00:00'
+            
+        release_dt = datetime.fromisoformat(release_time_str)
+        now_dt = datetime.now(timezone.utc)
+        
+        diff = (release_dt - now_dt).total_seconds()
+        
+        if diff <= 0:
+            logging.info("Precision Sync: Release time %s is in the past (by %.2fs), executing immediately.", 
+                         release_time_str, abs(diff))
+            return
+            
+        logging.info("Precision Sync: Synchronizing for release at %s (Current: %s, Diff: %.2fs)", 
+                     release_time_str, now_dt.isoformat(), diff)
+                     
+        # Stage 1: Coarse sleep until lead_seconds before target
+        coarse_wait = diff - lead_seconds
+        if coarse_wait > 0:
+            logging.info("Precision Sync: Coarse sleeping for %.2fs...", coarse_wait)
+            time.sleep(coarse_wait)
+            
+        # Stage 2: Fine-grained loop (busy-wait with tiny sleeps) to hit target precision
+        # Target 100ms before release to trigger action so request arrives exactly at release time
+        target_ts = release_dt.timestamp() - 0.100
+        
+        while True:
+            current_ts = datetime.now(timezone.utc).timestamp()
+            if current_ts >= target_ts:
+                break
+            # Use 5ms sleeps to keep accuracy high while preventing CPU pegging
+            time.sleep(0.005)
+            
+        logging.info("Precision Sync: TARGET REACHED (Current: %s). Releasing trigger!", 
+                     datetime.now(timezone.utc).isoformat())
+                     
+    except Exception as e:
+        logging.error("Precision Sync: Error in wait_for_release: %s", e)
 
 
 def _new_stealth_context(p, headless=True):
@@ -89,28 +140,45 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
             # --- Navigate date ---
             logging.info("Navigating to target date: %s", booking.desired_date)
             
+            today = datetime.today().date()
+            months_ahead = (booking.desired_date.year - today.year) * 12 + booking.desired_date.month - today.month
+            if months_ahead > 0:
+                logging.info("Target date is in a future month. Navigating calendar ahead by %d month(s).", months_ahead)
+                arrow_selector = "button:has(mat-icon:text('navigate_next')), .mat-calendar-next-button"
+                for i in range(months_ahead):
+                    btn = page.locator(arrow_selector).first
+                    btn.wait_for(state='visible', timeout=5000)
+                    btn.click(force=True)
+                    page.wait_for_timeout(1000)
+            
             day_str = str(booking.desired_date.day)
-            try:
-                # Target the specific Material calendar cell to avoid random matches
-                day_button = page.locator('mat-month-view .mat-calendar-body-cell-content').filter(has_text=re.compile(rf'^{day_str}$')).first
-                if not day_button.is_visible():
-                     day_button = page.get_by_text(day_str, exact=True).first
-                
-                day_button.wait_for(state='visible', timeout=10000)
-                day_button.click(force=True)
-                logging.info(f"Clicked day {day_str} directly.")
-                page.wait_for_load_state('networkidle', timeout=10000)
-            except Exception as e:
-                logging.info(f"Could not click day {day_str} directly ({e}), attempting arrow navigation.")
-                today = datetime.today().date()
-                delta = (booking.desired_date - today).days
-                if delta != 0:
-                    arrow_selector = "button:has(mat-icon:text('navigate_next')), .mat-calendar-next-button"
-                    for i in range(abs(delta)):
-                        btn = page.locator(arrow_selector).first
-                        btn.wait_for(state='visible', timeout=5000)
-                        btn.click(force=True)
-                        page.wait_for_timeout(1500)
+            # Target the specific Material calendar cell to avoid random matches
+            day_button = page.locator('mat-month-view .mat-calendar-body-cell-content').filter(has_text=re.compile(rf'^{day_str}$')).first
+            if not day_button.is_visible():
+                 day_button = page.get_by_text(day_str, exact=True).first
+            
+            day_button.wait_for(state='visible', timeout=10000)
+            
+            # Bypass disabled UI elements for early/midnight booking
+            day_button.evaluate("""el => {
+                el.classList.remove('mat-calendar-body-disabled');
+                el.removeAttribute('disabled');
+                el.removeAttribute('aria-disabled');
+                const cell = el.closest('.mat-calendar-body-cell');
+                if (cell) {
+                    cell.classList.remove('mat-calendar-body-disabled');
+                    cell.removeAttribute('disabled');
+                    cell.removeAttribute('aria-disabled');
+                    cell.style.pointerEvents = 'auto';
+                }
+            }""")
+            
+            # Precision wait until release time
+            wait_for_release(getattr(booking, 'release_time', None))
+            
+            day_button.click(force=True)
+            logging.info(f"Clicked day {day_str} directly.")
+            page.wait_for_load_state('networkidle', timeout=10000)
 
             # --- Players & Holes ---
             logging.info("Selecting %d players and 18 holes.", booking.players)
@@ -355,13 +423,31 @@ def book_town_of_colonie(url, booking, email, password, dry_run=False, headless=
                 logging.info(f"Selecting day {day_str} from dialog.")
                 
                 # Based on DOM inspection, the days are inside .day-background-upper spans
-                day_button = frame.locator('.day-background-upper:not(.is-disabled)').filter(has_text=re.compile(rf'^{day_str}$')).first
+                day_button = frame.locator('.day-background-upper').filter(has_text=re.compile(rf'^{day_str}$')).first
                 
                 # If that fails, try a broader text search within the iframe
                 if not day_button.is_visible(timeout=3000):
                     day_button = frame.get_by_text(day_str, exact=True).first
                 
                 day_button.wait_for(state='visible', timeout=5000)
+                
+                # Bypass disabled states for early booking
+                day_button.evaluate("""el => {
+                    el.classList.remove('is-disabled', 'disabled');
+                    el.removeAttribute('disabled');
+                    el.removeAttribute('aria-disabled');
+                    const cell = el.closest('.mat-calendar-body-cell, td, button');
+                    if (cell) {
+                        cell.classList.remove('is-disabled', 'disabled');
+                        cell.removeAttribute('disabled');
+                        cell.removeAttribute('aria-disabled');
+                        cell.style.pointerEvents = 'auto';
+                    }
+                }""")
+                
+                # Precision wait until release time
+                wait_for_release(getattr(booking, 'release_time', None))
+                
                 day_button.click(force=True)
                 logging.info(f"Clicked day {day_str} directly.")
                 page.wait_for_load_state('networkidle', timeout=10000)
@@ -513,8 +599,28 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
 
             # Click the day
             day_str = str(target.day)
-            day_selector = f'td[data-day="{day_str}"]:not(.disabled), .day:not(.disabled):has-text("{day_str}")'
-            page.locator(day_selector).first.click()
+            day_selector = f'td[data-day="{day_str}"], .day:has-text("{day_str}")'
+            day_element = page.locator(day_selector).first
+            day_element.wait_for(state='visible', timeout=10000)
+            
+            # Bypass disabled UI elements for early/midnight booking
+            day_element.evaluate("""el => {
+                el.classList.remove('disabled');
+                el.removeAttribute('disabled');
+                el.removeAttribute('aria-disabled');
+                const cell = el.closest('td, button, .day');
+                if (cell) {
+                    cell.classList.remove('disabled');
+                    cell.removeAttribute('disabled');
+                    cell.removeAttribute('aria-disabled');
+                    cell.style.pointerEvents = 'auto';
+                }
+            }""")
+            
+            # Precision wait until release time
+            wait_for_release(getattr(booking, 'release_time', None))
+            
+            day_element.click(force=True)
             page.wait_for_timeout(2500)  # Explicitly wait for SPA to load new day's data
 
             # --- Players & Holes ---
@@ -723,7 +829,21 @@ def book_via_eagleclub(url, booking, email, password, card_number=None, card_exp
             # --- Select date, players ---
             target = booking.desired_date
             logging.info("Selecting date: %s", target)
-            page.locator('a, div, span').filter(has_text=re.compile(rf'{target.strftime("%a")}.*{target.day}', re.I)).first.click()
+            day_element = page.locator('a, div, span').filter(has_text=re.compile(rf'{target.strftime("%a")}.*{target.day}', re.I)).first
+            day_element.wait_for(state='visible', timeout=10000)
+            
+            # Bypass disabled UI elements for early/midnight booking
+            day_element.evaluate("""el => {
+                el.classList.remove('disabled', 'is-disabled');
+                el.removeAttribute('disabled');
+                el.removeAttribute('aria-disabled');
+                el.style.pointerEvents = 'auto';
+            }""")
+            
+            # Precision wait until release time
+            wait_for_release(getattr(booking, 'release_time', None))
+            
+            day_element.click(force=True)
             page.wait_for_timeout(2500)
             
             logging.info("Selecting players: %d", booking.players)

@@ -73,11 +73,12 @@ COURSE_HANDLERS = {
 
 class MockBooking:
     """Wraps data to act like the object expected by playwright_logic"""
-    def __init__(self, desired_date, earliest, latest, players):
+    def __init__(self, desired_date, earliest, latest, players, release_time=None):
         self.desired_date = desired_date
         self.earliest_time = datetime.strptime(earliest, '%H:%M:%S').time()
         self.latest_time = datetime.strptime(latest, '%H:%M:%S').time()
         self.players = players
+        self.release_time = release_time
 
 def run_replication():
     """Runs the replication using the configured settings and dispatch table."""

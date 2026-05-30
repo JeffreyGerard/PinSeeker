@@ -46,6 +46,7 @@ class BookingWrapper:
         self.latest_time = datetime.time.fromisoformat(data['latest_time'])
         self.players = int(data['players'])
         self.course_name = data.get('course_name')
+        self.release_time = data.get('release_time')
 
 # Course Configuration Map - Synchronized with replicate_playwright.py
 COURSE_CONFIG = {
