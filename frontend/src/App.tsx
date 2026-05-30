@@ -21,15 +21,16 @@ const API_URL = '/api';
 
 // --- Hardcoded Courses (Serverless Architecture) ---
 const AVAILABLE_COURSES = [
-  { id: 1, name: "Capital Hills", url: "", advance_booking_days: 10 },
-  { id: 2, name: "Old Post Road", url: "", advance_booking_days: 10 },
-  { id: 3, name: "Orchard Creek", url: "", advance_booking_days: 14 },
-  { id: 4, name: "Schenectady Muni", url: "", advance_booking_days: 7 },
-  { id: 5, name: "Fairways of Halfmoon", url: "", advance_booking_days: 14 },
-  { id: 6, name: "Stadium Golf Club", url: "", advance_booking_days: 7 },
-  { id: 7, name: "Van Patten", url: "", advance_booking_days: 7 },
-  { id: 8, name: "Eagle Crest", url: "", advance_booking_days: 14 },
+  { id: 1, name: "Capital Hills", url: "", advance_booking_days: 3 },
+  { id: 8, name: "Eagle Crest", url: "", advance_booking_days: 4 },
+  { id: 5, name: "Fairways of Halfmoon", url: "", advance_booking_days: 6 },
+  { id: 2, name: "Old Post Road", url: "", advance_booking_days: 1 },
+  { id: 3, name: "Orchard Creek", url: "", advance_booking_days: 3 },
   { id: 9, name: "Saratoga Spa", url: "", advance_booking_days: 7 },
+  { id: 4, name: "Schenectady Muni", url: "", advance_booking_days: 7 },
+  { id: 6, name: "Stadium Golf Club", url: "", advance_booking_days: 4 },
+  { id: 10, name: "Town of Colonie", url: "", advance_booking_days: 2 },
+  { id: 7, name: "Van Patten", url: "", advance_booking_days: 7 },
 ];
 
 // --- Types ---
@@ -609,6 +610,67 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCoursePassword, setShowCoursePassword] = useState(false);
 
+  // Auto-calculate recommended execution date
+  useEffect(() => {
+    if (formData.course && formData.desired_date) {
+      const courseObj = AVAILABLE_COURSES.find(c => c.id === Number(formData.course));
+      if (courseObj) {
+        const desiredDate = new Date(formData.desired_date + 'T00:00:00');
+        const executionDate = new Date(desiredDate);
+        executionDate.setDate(desiredDate.getDate() - courseObj.advance_booking_days);
+        
+        const year = executionDate.getFullYear();
+        const month = String(executionDate.getMonth() + 1).padStart(2, '0');
+        const day = String(executionDate.getDate()).padStart(2, '0');
+        const formattedDate = `${year}-${month}-${day}`;
+        
+        setFormData(prev => {
+          if (prev.executionDate !== formattedDate) {
+            return { ...prev, executionDate: formattedDate };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [formData.course, formData.desired_date]);
+
+  const getValidationWarning = () => {
+    if (!formData.course || !formData.desired_date || !formData.executionDate) {
+      return null;
+    }
+    
+    const courseObj = AVAILABLE_COURSES.find(c => c.id === Number(formData.course));
+    if (!courseObj) return null;
+    
+    const dDate = new Date(formData.desired_date + 'T00:00:00');
+    const eDate = new Date(formData.executionDate + 'T00:00:00');
+    
+    const diffTime = dDate.getTime() - eDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return {
+        type: 'error' as const,
+        message: "Execution date cannot be after the playing date."
+      };
+    }
+    
+    if (diffDays > courseObj.advance_booking_days) {
+      return {
+        type: 'error' as const,
+        message: `Tee times for ${dDate.toLocaleDateString([], {month: 'numeric', day: 'numeric', year: '2-digit'})} are not released yet on ${eDate.toLocaleDateString([], {month: 'numeric', day: 'numeric', year: '2-digit'})}. ${courseObj.name} only allows booking up to ${courseObj.advance_booking_days} days in advance (Execution is too early by ${diffDays - courseObj.advance_booking_days} day(s)).`
+      };
+    }
+    
+    return {
+      type: 'success' as const,
+      message: `Eligible: Executing ${diffDays} day(s) before the round (Allowed window: ${courseObj.advance_booking_days} days).`
+    };
+  };
+
+  const validation = getValidationWarning();
+  const hasError = validation?.type === 'error';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -654,7 +716,7 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
               >
                 <input 
                   type="radio" name="course" value={course.id} className="sr-only"
-                  onChange={(e) => setFormData({...formData, course: e.target.value, desired_date: ''})}
+                  onChange={(e) => setFormData({...formData, course: e.target.value, desired_date: '', executionDate: ''})}
                   required
                 />
                 <div className="flex-1">
@@ -688,17 +750,13 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
               {(() => {
                 const selectedCourse = AVAILABLE_COURSES.find(c => c.id === Number(formData.course));
                 const today = new Date().toISOString().split('T')[0];
-                const maxDate = selectedCourse?.advance_booking_days
-                  ? new Date(Date.now() + selectedCourse.advance_booking_days * 86400000).toISOString().split('T')[0]
-                  : undefined;
                 return (
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Tee Date{maxDate && <span className="text-emerald-500 ml-2 normal-case tracking-normal">(max {selectedCourse?.advance_booking_days} days out)</span>}</label>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Tee Date{selectedCourse && <span className="text-emerald-500 ml-2 normal-case tracking-normal">(Booking window: {selectedCourse.advance_booking_days} days)</span>}</label>
                 <input 
                   type="date" className="w-full h-14 rounded-2xl bg-slate-50 border-transparent focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 border-2 px-5 font-bold text-slate-900 transition-all outline-none"
                   value={formData.desired_date}
                   min={today}
-                  max={maxDate}
                   onChange={(e) => setFormData({...formData, desired_date: e.target.value})}
                   required
                 />
@@ -811,6 +869,16 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
                     onChange={(e) => setFormData({...formData, executionTime: e.target.value})}
                   />
                 </div>
+
+                {validation && (
+                  <div className={`p-4 rounded-xl text-xs font-bold transition-all ${
+                    validation.type === 'error' 
+                      ? 'bg-red-500/10 border border-red-500/20 text-red-400' 
+                      : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400'
+                  }`}>
+                    {validation.message}
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -819,7 +887,7 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
         <div className="flex flex-col items-center gap-4 py-8">
           <button 
             type="submit" 
-            disabled={isSubmitting || !formData.course}
+            disabled={isSubmitting || !formData.course || hasError}
             className="w-full md:w-auto min-w-[300px] h-16 bg-emerald-600 text-white font-black text-lg rounded-2xl hover:bg-emerald-700 active:scale-95 transition-all shadow-2xl shadow-emerald-600/30 flex items-center justify-center gap-3 disabled:opacity-30 disabled:pointer-events-none"
           >
             {isSubmitting ? 'Armed & Loading...' : 'Schedule Seeker'}
