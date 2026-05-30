@@ -49,12 +49,15 @@ def schedule_booking_task(job_id, release_time_iso):
             "url": f"{service_url.rstrip('/')}/api/execute-job",
             "headers": {"Content-Type": "application/json"},
             "body": f'{{"job_id": "{job_id}"}}'.encode(),
-            "oidc_token": {
-                "service_account_email": os.getenv('TASK_SERVICE_ACCOUNT_EMAIL')
-            }
         },
         "schedule_time": timestamp
     }
+    
+    task_sa = os.getenv('TASK_SERVICE_ACCOUNT_EMAIL')
+    if task_sa:
+        task["http_request"]["oidc_token"] = {
+            "service_account_email": task_sa
+        }
     
     try:
         response = client.create_task(parent=parent, task=task)
@@ -122,16 +125,21 @@ def verify_firebase_token(request: Request):
 
 @app.get("/api/bookings")
 async def list_bookings(request: Request):
-    verify_firebase_token(request)
+    user = verify_firebase_token(request)
     
     if not db:
         return []
     
     try:
-        # Get last 20 jobs, ordered by creation time
-        jobs_ref = db.collection('tee_time_jobs').order_by('created_at', direction=firestore.Query.DESCENDING).limit(20)
+        # Fetch only jobs created by this specific user
+        jobs_ref = db.collection('tee_time_jobs').where('uid', '==', user['uid'])
         docs = jobs_ref.stream()
-        return [doc.to_dict() for doc in docs]
+        
+        # Sort in memory by creation time descending and limit to latest 20
+        # This prevents needing a custom composite Firestore index
+        jobs = [doc.to_dict() for doc in docs]
+        jobs.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        return jobs[:20]
     except Exception as e:
         print(f"Fetch error: {e}")
         return []
@@ -197,11 +205,12 @@ async def execute_job(req: ExecuteJobRequest):
     # Import execute_booking from worker.py
     # We do this inside the function to avoid circular imports or early initialization issues
     from worker import execute_booking
+    from starlette.concurrency import run_in_threadpool
     
     # We run it synchronously here so Cloud Run stays active until it finishes.
     # Cloud Tasks will wait for the response.
     try:
-        execute_booking(req.job_id, job_data)
+        await run_in_threadpool(execute_booking, req.job_id, job_data)
         return {"status": "success", "job_id": req.job_id}
     except Exception as e:
         print(f"Execution error: {e}")

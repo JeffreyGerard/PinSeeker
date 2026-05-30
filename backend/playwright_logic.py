@@ -577,17 +577,34 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
                 email_input = page.get_by_placeholder("Email").first
                 pass_input = page.get_by_placeholder("Password").first
                 
-                if email_input.is_visible(timeout=5000):
+                is_visible = False
+                try:
+                    is_visible = email_input.is_visible(timeout=5000)
+                except Exception:
+                    pass
+
+                if is_visible:
                     logging.info("Login form detected. Logging in...")
                     email_input.fill(email)
                     pass_input.fill(password)
                     pass_input.press("Enter")
                     
                     # Wait for login to complete
-                    email_input.wait_for(state='hidden', timeout=15000)
-                    logging.info("Login successful, waiting for booking options...")
-                    page.wait_for_timeout(4000) # Give UI time to load options
+                    try:
+                        email_input.wait_for(state='hidden', timeout=15000)
+                        logging.info("Login successful, waiting for booking options...")
+                        page.wait_for_timeout(4000) # Give UI time to load options
+                    except PlaywrightTimeoutError as e:
+                        screenshot_path = os.path.join(SCREENSHOT_DIR, 'foreup_login_error.png')
+                        try:
+                            page.screenshot(path=screenshot_path, timeout=5000, animations="disabled")
+                            logging.info(f"Saved login error screenshot to {screenshot_path}")
+                        except Exception:
+                            pass
+                        raise Exception("Golf course login failed - credentials may be incorrect, or portal blocked login.")
             except Exception as e:
+                if "login failed" in str(e):
+                    raise
                 logging.info(f"No login required or login transition handled: {e}")
 
             # --- Select Booking Options ---

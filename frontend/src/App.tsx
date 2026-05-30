@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Flag, Crosshair, LayoutDashboard, PlusCircle, Calendar, LogOut, Clock, 
-  CheckCircle2, AlertCircle, ChevronRight, Menu, X, Lock, Terminal, Trash2, XCircle
+  CheckCircle2, AlertCircle, ChevronRight, Menu, X, Lock, Terminal, Trash2, XCircle,
+  Eye, EyeOff
 } from 'lucide-react';
 import { auth, db } from './firebase';
 import { 
@@ -58,6 +59,7 @@ const LoginScreen = () => {
   const [forgotSuccess, setForgotSuccess] = useState(false);
   const [forgotError, setForgotError] = useState<string | null>(null);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -155,13 +157,20 @@ const LoginScreen = () => {
                 <div className="relative">
                   <Lock className="absolute left-4 top-3.5 w-5 h-5 text-slate-400" />
                   <input 
-                    type="password" 
+                    type={showPassword ? "text" : "password"} 
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                    className="w-full pl-12 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
                     placeholder="Enter account password"
                     required
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-3.5 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
                 </div>
               </div>
             </div>
@@ -249,6 +258,8 @@ const LoginScreen = () => {
 const ForcePasswordChangeScreen = ({ onPasswordUpdated }: { onPasswordUpdated: () => void }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -309,26 +320,44 @@ const ForcePasswordChangeScreen = ({ onPasswordUpdated }: { onPasswordUpdated: (
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">New Secure Password</label>
-                <input 
-                  type="password" 
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-                  placeholder="At least 6 characters"
-                  required
-                />
+                <div className="relative">
+                  <input 
+                    type={showNewPassword ? "text" : "password"} 
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                    placeholder="At least 6 characters"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(!showNewPassword)}
+                    className="absolute right-4 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Confirm Password</label>
-                <input 
-                  type="password" 
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-                  placeholder="Re-enter secure password"
-                  required
-                />
+                <div className="relative">
+                  <input 
+                    type={showConfirmPassword ? "text" : "password"} 
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                    placeholder="Re-enter secure password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -577,6 +606,7 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
     course_password: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCoursePassword, setShowCoursePassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -742,13 +772,23 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Course Password</label>
-                    <input 
-                      type="password" placeholder="••••••••"
-                      className="w-full h-12 rounded-xl bg-slate-800 border-transparent focus:border-emerald-500 border-2 px-4 text-sm font-medium text-white transition-all outline-none"
-                      value={formData.course_password}
-                      onChange={(e) => setFormData({...formData, course_password: e.target.value})}
-                      required
-                    />
+                    <div className="relative">
+                      <input 
+                        type={showCoursePassword ? "text" : "password"} 
+                        placeholder="••••••••"
+                        className="w-full h-12 rounded-xl bg-slate-800 border-transparent focus:border-emerald-500 border-2 pl-4 pr-12 text-sm font-medium text-white transition-all outline-none"
+                        value={formData.course_password}
+                        onChange={(e) => setFormData({...formData, course_password: e.target.value})}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCoursePassword(!showCoursePassword)}
+                        className="absolute right-4 top-3 text-slate-500 hover:text-slate-300 transition-colors"
+                      >
+                        {showCoursePassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -795,6 +835,8 @@ const NewRequestForm = ({ onSubmit }: { onSubmit: (data: any) => void }) => {
 const ProfileModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -861,26 +903,44 @@ const ProfileModal = ({ isOpen, onClose }: { isOpen: boolean; onClose: () => voi
 
           <div>
             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">New Password</label>
-            <input 
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-              placeholder="At least 6 characters"
-              required
-            />
+            <div className="relative">
+              <input 
+                type={showNewPassword ? "text" : "password"}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                placeholder="At least 6 characters"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPassword(!showNewPassword)}
+                className="absolute right-4 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showNewPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-black uppercase tracking-widest text-slate-400 mb-2 px-1">Confirm New Password</label>
-            <input 
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
-              placeholder="Re-enter secure password"
-              required
-            />
+            <div className="relative">
+              <input 
+                type={showConfirmPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none font-medium transition-all"
+                placeholder="Re-enter secure password"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                className="absolute right-4 top-3 text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
 
           <button 
