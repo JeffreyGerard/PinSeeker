@@ -693,6 +693,9 @@ def book_stadium(url, booking, email, password, dry_run=False, headless=True):
 def book_van_patten(url, booking, email, password, dry_run=False, headless=True):
     return book_via_foreup_index(url, booking_class_id=None, booking=booking, email=email, password=password, dry_run=dry_run, headless=headless)
 
+def book_saratoga_spa(url, booking, email, password, dry_run=False, headless=True):
+    return book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
+
 # ---------------------------------------------------------------------------
 # Eagle Crest (Eagle Club Systems)
 # ---------------------------------------------------------------------------

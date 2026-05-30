@@ -29,6 +29,7 @@ const AVAILABLE_COURSES = [
   { id: 6, name: "Stadium Golf Club", url: "", advance_booking_days: 7 },
   { id: 7, name: "Van Patten", url: "", advance_booking_days: 7 },
   { id: 8, name: "Eagle Crest", url: "", advance_booking_days: 14 },
+  { id: 9, name: "Saratoga Spa", url: "", advance_booking_days: 7 },
 ];
 
 // --- Types ---

@@ -60,6 +60,10 @@ COURSE_HANDLERS = {
     "van_patten": {
         "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
         "func": playwright_logic.book_van_patten,
+    },
+    "saratoga_spa": {
+        "url": "https://foreupsoftware.com/index.php/booking/21684/8618#/teetimes",
+        "func": playwright_logic.book_saratoga_spa,
     }
 }
 
