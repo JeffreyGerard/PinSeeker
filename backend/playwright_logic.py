@@ -508,7 +508,7 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             months_ahead = (target.year - today.year) * 12 + target.month - today.month
             if months_ahead > 0:
                 for _ in range(months_ahead):
-                    page.locator('button.next-arrow, .fc-next-button, button[aria-label="next"]').first.click()
+                    page.locator('th.next, button.next-arrow, .fc-next-button, button[aria-label="next"]').first.click()
                     page.wait_for_timeout(1000)
 
             # Click the day

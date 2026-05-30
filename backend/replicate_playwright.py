@@ -7,13 +7,13 @@ import playwright_logic
 # ---------------------------------------------------------------------------
 # MOCK DATA - EDIT THESE FOR YOUR TEST
 # ---------------------------------------------------------------------------
-COURSE_TO_TEST = "orchard_creek"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest
-TARGET_DATE = date.today() + timedelta(days=2)
+COURSE_TO_TEST = "schenectady"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest, saratoga_spa
+TARGET_DATE = date(2026, 6, 4)
 EARLIEST_TIME = "09:00:00"
 LATEST_TIME = "20:00:00"
 PLAYERS = 4
 DRY_RUN = False  # Set to False to actually attempt booking
-HEADLESS = False  # Set to True for hidden browser, False to see what is happening
+HEADLESS = True  # Set to True for hidden browser, False to see what is happening
 
 # Credentials (Use .env or hardcode for local debug only)
 # IMPORTANT: For local debugging only. Do not commit credentials.
