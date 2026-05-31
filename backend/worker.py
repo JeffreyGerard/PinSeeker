@@ -98,8 +98,21 @@ def execute_booking(job_id, job_data, dry_run=False):
     if db is None:
         raise ValueError("Firestore client is not initialized.")
         
-    # 1. Update status to RUNNING
+    # Check fresh status to handle cancellations or duplicate trigger runs
     doc_ref = db.collection('tee_time_jobs').document(job_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        logging.warning(f"Job {job_id} not found in Firestore. Skipping.")
+        return
+        
+    fresh_data = doc.to_dict()
+    current_status = fresh_data.get('status')
+    
+    if current_status != 'PENDING':
+        logging.info(f"Job {job_id} status is '{current_status}'. Skipping execution.")
+        return
+        
+    # 1. Update status to RUNNING
     doc_ref.update({"status": "RUNNING"})
 
     # 2. Prepare the data wrapper

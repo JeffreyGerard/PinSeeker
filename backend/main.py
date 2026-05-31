@@ -185,6 +185,44 @@ async def create_booking(booking_request: BookingRequest, request: Request):
         print(f"Firestore error: {e}")
         raise HTTPException(status_code=500, detail="Failed to save booking request")
 
+@app.post("/api/bookings/{job_id}/cancel")
+async def cancel_booking(job_id: str, request: Request):
+    user = verify_firebase_token(request)
+    
+    if not db:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+        
+    doc_ref = db.collection('tee_time_jobs').document(job_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+        
+    job_data = doc.to_dict()
+    
+    # Verify user ownership of this job
+    if job_data.get("uid") != user["uid"]:
+        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking request")
+        
+    # Only PENDING requests can be cancelled
+    if job_data.get("status") != "PENDING":
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Only PENDING booking requests can be cancelled. Current status is {job_data.get('status')}."
+        )
+        
+    try:
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        doc_ref.update({
+            "status": "CANCELLED",
+            "result_log": "Cancelled by user",
+            "updated_at": now
+        })
+        return {"status": "success", "message": "Booking request successfully cancelled."}
+    except Exception as e:
+        print(f"Firestore update error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to cancel booking request")
+
 class ExecuteJobRequest(BaseModel):
     job_id: str
 

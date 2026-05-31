@@ -492,7 +492,7 @@ const StatusBadge = ({ status }: { status: string }) => {
   );
 };
 
-const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], emptyMessage: string }) => (
+const BookingTable = ({ bookings, emptyMessage, onCancel }: { bookings: BookingRequest[], emptyMessage: string, onCancel: (id: string) => void }) => (
   <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 overflow-hidden animate-in fade-in slide-in-from-bottom-5 duration-300">
     <div className="overflow-x-auto">
       <table className="w-full text-sm text-left border-collapse">
@@ -503,6 +503,7 @@ const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], 
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px] hidden sm:table-cell">Players</th>
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Status</th>
             <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px] hidden md:table-cell">Details</th>
+            <th className="px-8 py-4 font-bold uppercase tracking-wider text-[10px]">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
@@ -530,11 +531,22 @@ const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], 
               <td className="px-8 py-5 text-slate-500 font-medium text-xs hidden md:table-cell max-w-[200px] truncate">
                 {booking.result_log || `Releases: ${new Date(booking.release_time).toLocaleString()}`}
               </td>
+              <td className="px-8 py-5">
+                {booking.status === 'PENDING' && (
+                  <button 
+                    onClick={() => onCancel(booking.id)}
+                    className="p-2 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 rounded-xl transition-all font-semibold text-xs flex items-center gap-1.5 border border-red-200/50 shadow-sm"
+                  >
+                    <XCircle className="w-4 h-4" />
+                    <span>Cancel</span>
+                  </button>
+                )}
+              </td>
             </tr>
           ))}
           {bookings.length === 0 && (
             <tr>
-              <td colSpan={5} className="px-8 py-16 text-center">
+              <td colSpan={6} className="px-8 py-16 text-center">
                 <div className="flex flex-col items-center gap-3">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
                     <Calendar className="w-8 h-8 text-slate-200" />
@@ -550,7 +562,7 @@ const BookingTable = ({ bookings, emptyMessage }: { bookings: BookingRequest[], 
   </div>
 );
 
-const Dashboard = ({ bookings, isLoading, isSyncing }: { bookings: BookingRequest[], isLoading: boolean, isSyncing: boolean }) => {
+const Dashboard = ({ bookings, isLoading, isSyncing, onCancel }: { bookings: BookingRequest[], isLoading: boolean, isSyncing: boolean, onCancel: (id: string) => void }) => {
   // Only display full screen spinner on first load if we don't have bookings in cache
   if (isLoading && bookings.length === 0) return (
     <div className="flex flex-col items-center justify-center h-64 space-y-4">
@@ -590,7 +602,7 @@ const Dashboard = ({ bookings, isLoading, isSyncing }: { bookings: BookingReques
       <div className="px-1 py-2">
         <h3 className="text-xl font-bold text-slate-900 mb-4">Active & Recent Jobs</h3>
       </div>
-      <BookingTable bookings={bookings} emptyMessage="No active bookings. Deploy a seeker!" />
+      <BookingTable bookings={bookings} emptyMessage="No active bookings. Deploy a seeker!" onCancel={onCancel} />
     </div>
   );
 };
@@ -1144,6 +1156,32 @@ const App = () => {
     }
   };
 
+  const handleCancelBooking = async (id: string) => {
+    if (!window.confirm("Are you sure you want to cancel this booking request?")) {
+      return;
+    }
+    
+    try {
+      if (!auth.currentUser) return;
+      const token = await auth.currentUser.getIdToken();
+      const res = await fetch(`${API_URL}/bookings/${id}/cancel`, {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        alert("Booking request successfully cancelled.");
+        fetchData(true);
+      } else {
+        const errorData = await res.json();
+        alert(`Failed to cancel: ${errorData.detail || "Unknown error"}`);
+      }
+    } catch (e) {
+      alert("Failed to connect to server.");
+    }
+  };
+
   const handleForcedPasswordUpdated = () => {
     setProfile((prev: any) => ({ ...prev, firstLogin: false }));
   };
@@ -1199,7 +1237,7 @@ const App = () => {
         {/* Dashboard / Request Area */}
         <div className="p-6 md:p-12">
           {activeTab === 'dashboard' && (
-            <Dashboard bookings={bookings} isLoading={loading} isSyncing={isSyncing} />
+            <Dashboard bookings={bookings} isLoading={loading} isSyncing={isSyncing} onCancel={handleCancelBooking} />
           )}
           {activeTab === 'new-request' && (
             <NewRequestForm onSubmit={handleNewBooking} />
