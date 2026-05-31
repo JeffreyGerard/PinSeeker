@@ -176,6 +176,24 @@ def book_cps_golf(url, booking, email, password, dry_run=False, headless=True):
             # Precision wait until release time
             wait_for_release(getattr(booking, 'release_time', None))
             
+            # Toggle month right after wait to refresh calendar states
+            if getattr(booking, 'release_time', None):
+                try:
+                    logging.info("Precision Sync: Toggling month to refresh Material calendar states.")
+                    prev_btn = page.locator('button:has(mat-icon:text("navigate_before")), .mat-calendar-previous-button').first
+                    next_btn = page.locator('button:has(mat-icon:text("navigate_next")), .mat-calendar-next-button').first
+                    if prev_btn.is_visible(timeout=2000) and next_btn.is_visible(timeout=2000):
+                        prev_btn.click(force=True)
+                        page.wait_for_timeout(200)
+                        next_btn.click(force=True)
+                        page.wait_for_timeout(200)
+                        # Re-locate the day element since DOM re-rendered
+                        day_button = page.locator('mat-month-view .mat-calendar-body-cell-content').filter(has_text=re.compile(rf'^{day_str}$')).first
+                        if not day_button.is_visible():
+                             day_button = page.get_by_text(day_str, exact=True).first
+                except Exception as e:
+                    logging.warning("Failed to toggle month: %s", e)
+            
             day_button.click(force=True)
             logging.info(f"Clicked day {day_str} directly.")
             page.wait_for_load_state('networkidle', timeout=10000)
@@ -448,6 +466,24 @@ def book_town_of_colonie(url, booking, email, password, dry_run=False, headless=
                 # Precision wait until release time
                 wait_for_release(getattr(booking, 'release_time', None))
                 
+                # Toggle month right after wait to refresh calendar states
+                if getattr(booking, 'release_time', None):
+                    try:
+                        logging.info("Precision Sync: Toggling month inside iframe to refresh calendar states.")
+                        prev_btn = frame.locator('button:has(mat-icon:text("navigate_before")), .mat-calendar-previous-button').first
+                        next_btn = frame.locator('button:has(mat-icon:text("navigate_next")), .mat-calendar-next-button').first
+                        if prev_btn.is_visible(timeout=2000) and next_btn.is_visible(timeout=2000):
+                            prev_btn.click(force=True)
+                            page.wait_for_timeout(200)
+                            next_btn.click(force=True)
+                            page.wait_for_timeout(200)
+                            # Re-locate day
+                            day_button = frame.locator('.day-background-upper').filter(has_text=re.compile(rf'^{day_str}$')).first
+                            if not day_button.is_visible():
+                                day_button = frame.get_by_text(day_str, exact=True).first
+                    except Exception as e:
+                        logging.warning("Failed to toggle month inside iframe: %s", e)
+                
                 day_button.click(force=True)
                 logging.info(f"Clicked day {day_str} directly.")
                 page.wait_for_load_state('networkidle', timeout=10000)
@@ -619,6 +655,22 @@ def book_via_foreup_software(url, booking, email, password, dry_run=False, headl
             
             # Precision wait until release time
             wait_for_release(getattr(booking, 'release_time', None))
+            
+            # Toggle month right after wait to refresh calendar states
+            if getattr(booking, 'release_time', None):
+                try:
+                    logging.info("Precision Sync: Toggling month to refresh datepicker states.")
+                    prev_btn = page.locator('th.prev, button.prev-arrow, .fc-prev-button, button[aria-label="prev"]').first
+                    next_btn = page.locator('th.next, button.next-arrow, .fc-next-button, button[aria-label="next"]').first
+                    if prev_btn.is_visible(timeout=2000) and next_btn.is_visible(timeout=2000):
+                        prev_btn.click(force=True)
+                        page.wait_for_timeout(200)
+                        next_btn.click(force=True)
+                        page.wait_for_timeout(200)
+                        # Re-locate the day element since DOM re-rendered
+                        day_element = page.locator(day_selector).first
+                except Exception as e:
+                    logging.warning("Failed to toggle month: %s", e)
             
             day_element.click(force=True)
             page.wait_for_timeout(2500)  # Explicitly wait for SPA to load new day's data
