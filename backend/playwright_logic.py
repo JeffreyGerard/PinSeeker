@@ -21,7 +21,7 @@ def parse_time(date_obj, time_obj):
     return datetime.combine(date_obj, time_obj)
 
 
-def wait_for_release(release_time_str, lead_seconds=1.0):
+def wait_for_release(release_time_str, lead_seconds=1.0, offset_seconds=0.250):
     """
     Precision wait loop to synchronize execution with the exact release time.
     Calculates time difference and coarse-sleeps, then fine-sleeps/busy-waits.
@@ -55,8 +55,8 @@ def wait_for_release(release_time_str, lead_seconds=1.0):
             time.sleep(coarse_wait)
             
         # Stage 2: Fine-grained loop (busy-wait with tiny sleeps) to hit target precision
-        # Target 100ms before release to trigger action so request arrives exactly at release time
-        target_ts = release_dt.timestamp() - 0.100
+        # Target offset_seconds after release to ensure the server-side release is fully live and processed
+        target_ts = release_dt.timestamp() + offset_seconds
         
         while True:
             current_ts = datetime.now(timezone.utc).timestamp()
