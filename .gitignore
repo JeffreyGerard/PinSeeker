@@ -31,3 +31,4 @@ env/
 *.sln
 *.sw?
 *service-account.json
+start.sh

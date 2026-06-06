@@ -12,7 +12,7 @@ TARGET_DATE = date(2026, 6, 4)
 EARLIEST_TIME = "09:00:00"
 LATEST_TIME = "20:00:00"
 PLAYERS = 4
-DRY_RUN = False  # Set to False to actually attempt booking
+DRY_RUN = True  # Set to False to actually attempt booking
 HEADLESS = True  # Set to True for hidden browser, False to see what is happening
 
 # Credentials (Use .env or hardcode for local debug only)
