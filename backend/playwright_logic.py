@@ -309,9 +309,10 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
                         logging.warning(f"Click action threw an error: {e}")
                     
                     try:
-                        # Wait for the modal to appear
-                        await page.get_by_role("button", name="Continue").wait_for(state='visible', timeout=5000)
-                        logging.info("Checkout modal opened.")
+                        # Wait for the modal/notice to appear (Next or Continue button)
+                        next_or_continue = page.get_by_role("button", name=re.compile(r'^(Next|Continue)$', re.I)).first
+                        await next_or_continue.wait_for(state='visible', timeout=5000)
+                        logging.info("Checkout modal/notice opened.")
                         break
                     except PlaywrightTimeoutError:
                         if attempt == 5:
@@ -323,19 +324,19 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
             except Exception as e:
                 logging.warning(f"Initial tee time click failed: {e}")
 
-            # 2. Sequence through the checkout steps
+            # 2. Sequence through the checkout steps (click Next/Continue through terms & notices)
             try:
-                for i in range(2):
-                    logging.info(f"Looking for button: Continue (Step {i+1})")
-                    btn = page.get_by_role("button", name="Continue")
-                    if await btn.is_visible(timeout=10000):
-                        for attempt in range(3):
-                            await btn.click(force=True)
-                            await page.wait_for_timeout(2000)
-                            if not await btn.is_visible(): break
+                for step in range(3):
+                    btn = page.get_by_role("button", name=re.compile(r'^(Next|Continue)$', re.I)).first
+                    if await btn.is_visible(timeout=5000):
+                        logging.info(f"Clicking modal step button: {await btn.inner_text()}")
+                        await btn.click(force=True)
+                        await page.wait_for_timeout(2000)
+                    else:
+                        break
 
                 logging.info("Looking for button: Finalize Reservation")
-                finalize_btn = page.get_by_role("button", name="Finalize Reservation")
+                finalize_btn = page.get_by_role("button", name=re.compile(r'Finalize|Complete|Book', re.I)).first
                 await finalize_btn.wait_for(state='visible', timeout=15000)
                 
                 clicked_successfully = False
