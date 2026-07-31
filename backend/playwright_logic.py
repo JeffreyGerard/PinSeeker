@@ -310,7 +310,7 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
                     
                     try:
                         # Wait for the modal/notice to appear (Next or Continue button)
-                        next_or_continue = page.get_by_role("button", name=re.compile(r'^(Next|Continue)$', re.I)).first
+                        next_or_continue = page.get_by_role("button", name=re.compile(r'Next|Continue', re.I)).first
                         await next_or_continue.wait_for(state='visible', timeout=5000)
                         logging.info("Checkout modal/notice opened.")
                         break
@@ -327,21 +327,21 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
             # 2. Sequence through the checkout steps (click Next/Continue through terms & notices)
             try:
                 for step in range(3):
-                    btn = page.get_by_role("button", name=re.compile(r'^(Next|Continue)$', re.I)).first
-                    if await btn.is_visible(timeout=5000):
+                    btn = page.get_by_role("button", name=re.compile(r'Next|Continue', re.I)).first
+                    if await btn.is_visible(timeout=3000):
                         logging.info(f"Clicking modal step button: {await btn.inner_text()}")
                         await btn.click(force=True)
                         await page.wait_for_timeout(2000)
                     else:
                         break
 
-                logging.info("Looking for button: Finalize Reservation")
-                finalize_btn = page.get_by_role("button", name=re.compile(r'Finalize|Complete|Book', re.I)).first
+                logging.info("Looking for button: Complete/Finalize Reservation")
+                finalize_btn = page.get_by_role("button", name=re.compile(r'Complete Reservation|Finalize Reservation|Book', re.I)).first
                 await finalize_btn.wait_for(state='visible', timeout=15000)
                 
                 clicked_successfully = False
                 for attempt in range(6):
-                    logging.info(f"Clicking Finalize Reservation (Attempt {attempt + 1})")
+                    logging.info(f"Clicking Complete/Finalize Reservation (Attempt {attempt + 1})")
                     try:
                         await finalize_btn.scroll_into_view_if_needed()
                         if attempt % 2 == 0:
