@@ -258,7 +258,7 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
             earliest = parse_time(booking.desired_date, booking.earliest_time)
             latest = parse_time(booking.desired_date, booking.latest_time)
             
-            all_buttons = await page.locator('button').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
+            all_buttons = await page.locator('button, mat-card, .teetime-card, [class*="teetime"]').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
             booking_element = None
             best_time_str = ''
 
@@ -288,41 +288,34 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
             # --- Book & Finalize ---
             logging.info("Attempting to book tee time: %s", best_time_str)
 
-            # 1. Click tee time until the first Continue button appears
-            try:
-                for attempt in range(6):
-                    logging.info(f"Clicking tee time slot (Attempt {attempt + 1})")
+            # 1. Click tee time until the checkout modal/notice appears
+            modal_opened = False
+            for attempt in range(6):
+                logging.info(f"Clicking tee time slot (Attempt {attempt + 1})")
+                try:
+                    await booking_element.scroll_into_view_if_needed()
+                    await booking_element.click(force=True)
                     
-                    try:
-                        # Scroll to ensure it's in the viewport
-                        await booking_element.scroll_into_view_if_needed()
-                        
-                        # Get bounding box and click in the absolute center
-                        box = await booking_element.bounding_box()
-                        if box:
-                            await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
-                            logging.info("Triggered coordinate-based mouse click.")
-                        else:
-                            await booking_element.click(force=True)
-                            logging.info("Triggered standard force click (no bounding box).")
-                    except Exception as e:
-                        logging.warning(f"Click action threw an error: {e}")
-                    
-                    try:
-                        # Wait for the modal/notice to appear (Next or Continue button)
-                        next_or_continue = page.get_by_role("button", name=re.compile(r'Next|Continue', re.I)).first
-                        await next_or_continue.wait_for(state='visible', timeout=5000)
-                        logging.info("Checkout modal/notice opened.")
-                        break
-                    except PlaywrightTimeoutError:
-                        if attempt == 5:
-                            screenshot_path = os.path.join(SCREENSHOT_DIR, 'modal_fail_debug.png')
-                            await page.screenshot(path=screenshot_path, timeout=5000, animations="disabled")
-                            logging.warning(f"Modal failed to open after all attempts. Saved debug screenshot to {screenshot_path}")
-                        await page.wait_for_timeout(2000)
-                        continue
-            except Exception as e:
-                logging.warning(f"Initial tee time click failed: {e}")
+                    box = await booking_element.bounding_box()
+                    if box:
+                        await page.mouse.click(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                except Exception as e:
+                    logging.warning(f"Click action error: {e}")
+                
+                try:
+                    next_or_continue = page.get_by_role("button", name=re.compile(r'Next|Continue', re.I)).first
+                    await next_or_continue.wait_for(state='visible', timeout=5000)
+                    logging.info("Checkout modal/notice opened.")
+                    modal_opened = True
+                    break
+                except PlaywrightTimeoutError:
+                    await page.wait_for_timeout(2000)
+                    continue
+
+            if not modal_opened:
+                screenshot_path = os.path.join(SCREENSHOT_DIR, 'modal_fail_debug.png')
+                await page.screenshot(path=screenshot_path, timeout=5000, animations="disabled")
+                raise Exception("Checkout modal/notice failed to open after clicking tee time slot.")
 
             # 2. Sequence through the checkout steps (click Next/Continue through terms & notices)
             try:
