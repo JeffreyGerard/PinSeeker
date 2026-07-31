@@ -1,4 +1,4 @@
-import time
+import asyncio
 import datetime
 import os
 import logging
@@ -32,7 +32,7 @@ else:
 
 # Initialize Firestore
 try:
-    db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'pinseeker-app'))
+    db = firestore.Client()
 except Exception as e:
     logging.error(f"Failed to connect to Firestore: {e}")
     exit(1)
@@ -48,72 +48,36 @@ class BookingWrapper:
         self.course_name = data.get('course_name')
         self.release_time = data.get('release_time')
 
-# Course Configuration Map - Synchronized with replicate_playwright.py
-COURSE_CONFIG = {
-    "capital hills": {
-        "url": "https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
-        "func": playwright_logic.book_cps_golf,
-    },
-    "eagle crest": {
-        "url": "https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101",
-        "func": playwright_logic.book_via_eagleclub,
-    },
-    "fairways": {
-        "url": "https://foreupsoftware.com/index.php/booking/22948/12410#/welcome",
-        "func": playwright_logic.book_fairways_halfmoon,
-    },
-    "post road": {
-        "url": "https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
-        "func": playwright_logic.book_cps_old_post,
-    },
-    "orchard creek": {
-        "url": "https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes",
-        "func": playwright_logic.book_orchard_creek,
-    },
-    "schenectady": {
-        "url": "https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes",
-        "func": playwright_logic.book_schenectady_muni,
-    },
-    "stadium": {
-        "url": "https://foreupsoftware.com/index.php/booking/index/3332#teetimes",
-        "func": playwright_logic.book_stadium,
-    },
-    "colonie": {
-        "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
-        "func": playwright_logic.book_town_of_colonie,
-    },
-    "van patten": {
-        "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
-        "func": playwright_logic.book_van_patten,
-    },
-    "saratoga spa": {
-        "url": "https://foreupsoftware.com/index.php/booking/21684/8618#/teetimes",
-        "func": playwright_logic.book_saratoga_spa,
-    }
-}
+# Course Configuration - Single source of truth
+from course_config import COURSE_CONFIG, get_handler
 
-def execute_booking(job_id, job_data, dry_run=False):
+async def execute_booking(job_id, job_data, dry_run=False):
     logging.info(f"Executing Snipe for Job {job_id} at {job_data['course_name']} (Dry Run: {dry_run})")
     
     if db is None:
         raise ValueError("Firestore client is not initialized.")
         
-    # Check fresh status to handle cancellations or duplicate trigger runs
     doc_ref = db.collection('tee_time_jobs').document(job_id)
-    doc = doc_ref.get()
-    if not doc.exists:
-        logging.warning(f"Job {job_id} not found in Firestore. Skipping.")
-        return
+
+    @firestore.transactional
+    def claim_job_transaction(transaction, ref):
+        snapshot = ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False, "Not found"
         
-    fresh_data = doc.to_dict()
-    current_status = fresh_data.get('status')
+        current_status = snapshot.get('status')
+        if current_status != 'PENDING':
+            return False, f"Status is '{current_status}'"
+            
+        transaction.update(ref, {"status": "RUNNING"})
+        return True, "Claimed"
+
+    transaction = db.transaction()
+    success, reason = claim_job_transaction(transaction, doc_ref)
     
-    if current_status != 'PENDING':
-        logging.info(f"Job {job_id} status is '{current_status}'. Skipping execution.")
+    if not success:
+        logging.info(f"Job {job_id} could not be claimed. Reason: {reason}. Skipping execution.")
         return
-        
-    # 1. Update status to RUNNING
-    doc_ref.update({"status": "RUNNING"})
 
     # 2. Prepare the data wrapper
     booking = BookingWrapper(job_data)
@@ -121,6 +85,15 @@ def execute_booking(job_id, job_data, dry_run=False):
     
     email = job_data.get('course_email', 'user@example.com')
     password = job_data.get('course_password', 'password123')
+
+    # Decrypt the password if it was encrypted at storage time
+    if job_data.get('password_encrypted') and password:
+        try:
+            from utils import decrypt_password
+            password = decrypt_password(password)
+        except Exception as e:
+            logging.error(f"Failed to decrypt course_password for job {job_id}: {e}")
+            raise Exception(f"Password decryption failed: {e}")
 
     try:
         # 3. The Course Router
@@ -134,7 +107,7 @@ def execute_booking(job_id, job_data, dry_run=False):
             raise Exception(f"No routing logic found for course: {course_query}")
 
         logging.info(f"Routing to {handler['func'].__name__} with URL: {handler['url']}")
-        result_message = handler["func"](handler["url"], booking, email, password, dry_run=dry_run)
+        result_message = await handler["func"](handler["url"], booking, email, password, dry_run=dry_run)
 
         # 4. If successful:
         logging.info(f"Booking Automation Successful! Result: {result_message}")
@@ -151,9 +124,28 @@ def execute_booking(job_id, job_data, dry_run=False):
             "result_log": str(e),
             "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
+        # Try to capture and upload error screenshot from screenshots/ folder
+        try:
+            import base64
+            screenshot_dir = os.path.join(os.getcwd(), 'screenshots')
+            if os.path.exists(screenshot_dir):
+                files = [f for f in os.listdir(screenshot_dir) if f.endswith('.png')]
+                if files:
+                    files.sort(key=lambda x: os.path.getmtime(os.path.join(screenshot_dir, x)), reverse=True)
+                    newest_file = files[0]
+                    full_path = os.path.join(screenshot_dir, newest_file)
+                    with open(full_path, "rb") as image_file:
+                        encoded_string = base64.b64encode(image_file.read()).decode('utf-8')
+                    doc_ref.update({
+                        "error_screenshot": f"data:image/png;base64,{encoded_string}"
+                    })
+                    logging.info(f"Successfully uploaded error screenshot {newest_file} to Firestore.")
+                    os.remove(full_path)
+        except Exception as se:
+            logging.warning(f"Failed to capture and upload error screenshot: {se}")
 
 
-def find_and_wait_for_job():
+async def find_and_wait_for_job():
     logging.info("Windows Sniper started. Checking for imminent jobs...")
     now_utc = datetime.datetime.now(datetime.timezone.utc)
     
@@ -181,10 +173,10 @@ def find_and_wait_for_job():
                 logging.info(f"Waiting exactly {seconds_until_release:.2f} seconds...")
                 
                 # The crucial simple wait:
-                time.sleep(seconds_until_release)
+                await asyncio.sleep(seconds_until_release)
                 
                 # Time is up! Execute!
-                execute_booking(doc.id, job_data)
+                await execute_booking(doc.id, job_data)
                 
                 # We only process one job per wake
                 return
@@ -217,9 +209,9 @@ if __name__ == '__main__':
         doc_ref = db.collection('tee_time_jobs').document(args.debug_job)
         doc = doc_ref.get()
         if doc.exists:
-            execute_booking(doc.id, doc.to_dict(), dry_run=args.dry_run)
+            asyncio.run(execute_booking(doc.id, doc.to_dict(), dry_run=args.dry_run))
         else:
             logging.error("Job ID not found in Firestore.")
     else:
         # Normal production flow
-        find_and_wait_for_job()
+        asyncio.run(find_and_wait_for_job())

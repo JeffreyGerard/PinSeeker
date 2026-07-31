@@ -1,113 +1,151 @@
+"""
+PinSeeker Local Test Harness
+
+Test scraper logic locally without Firestore or Cloud Tasks.
+Reads credentials from .env file instead of hardcoding them.
+
+Usage:
+    # List available courses
+    python replicate_playwright.py --list
+
+    # Test a course (dry run, visible browser)
+    python replicate_playwright.py --course "orchard creek" --date 2026-07-25 --headless false
+
+    # Test with specific time window and players
+    python replicate_playwright.py --course "fairways" --date 2026-07-25 --earliest 07:00 --latest 11:00 --players 2
+
+    # Live run (actually attempts to book)
+    python replicate_playwright.py --course "stadium" --date 2026-07-25 --live
+"""
 from datetime import datetime, date, timedelta
 import traceback
+import asyncio
+import argparse
+import os
+import sys
 
-# Import the logic we want to debug
-import playwright_logic
+# Load .env for credentials
+from dotenv import load_dotenv
+load_dotenv()
 
-# ---------------------------------------------------------------------------
-# MOCK DATA - EDIT THESE FOR YOUR TEST
-# ---------------------------------------------------------------------------
-COURSE_TO_TEST = "schenectady"  # Options: capital_hills, old_post, orchard_creek, schenectady, fairways, stadium, van_patten, eagle_crest, saratoga_spa
-TARGET_DATE = date(2026, 6, 4)
-EARLIEST_TIME = "09:00:00"
-LATEST_TIME = "20:00:00"
-PLAYERS = 4
-DRY_RUN = True  # Set to False to actually attempt booking
-HEADLESS = True  # Set to True for hidden browser, False to see what is happening
+# Import the shared course config
+from course_config import COURSE_CONFIG, get_handler, list_courses
 
-# Credentials (Use .env or hardcode for local debug only)
-# IMPORTANT: For local debugging only. Do not commit credentials.
-EMAIL = "jeff.gerard05@gmail.com"
-PASSWORD = "Password101"
-
-# ---------------------------------------------------------------------------
-# HANDLER DISPATCH TABLE
-# ---------------------------------------------------------------------------
-
-COURSE_HANDLERS = {
-    "capital_hills": {
-        "url": "https://capitalhillsny.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
-        "func": playwright_logic.book_cps_golf,
-    },
-    "eagle_crest": {
-        "url": "https://player.eagleclubsystems.online/#/tee-slot?dbname=eaglecrest20260101",
-        "func": playwright_logic.book_via_eagleclub,
-    },
-    "fairways": {
-        "url": "https://foreupsoftware.com/index.php/booking/22948/12410#/welcome",
-        "func": playwright_logic.book_fairways_halfmoon,
-    },
-    "old_post": {
-        "url": "https://oldepostroad.cps.golf/onlineresweb/search-teetime?TeeOffTimeMin=0&TeeOffTimeMax=23.999722222222225",
-        "func": playwright_logic.book_cps_old_post,
-    },
-    "orchard_creek": {
-        "url": "https://foreupsoftware.com/index.php/booking/19530/1791?_gl=1*yg2s5f*_ga*OTc1NDk3MjU5LjE3Nzc3Mjc1NDE.*_ga_WQPLP348DP*czE3NzgzMjYwMTEkbzIkZzAkdDE3NzgzMjYwMTEkajYwJGwwJGgw#teetimes",
-        "func": playwright_logic.book_orchard_creek,
-    },
-    "schenectady": {
-        "url": "https://foreupsoftware.com/index.php/booking/20480/4739?_gl=1*is3gta*_ga*MzM4MjY1MTE4LjE3NzgzMjYxMzA.*_ga_WQPLP348DP*czE3NzgzMjYxMzAkbzEkZzAkdDE3NzgzMjYxMzMkajU3JGwwJGgw#/teetimes",
-        "func": playwright_logic.book_schenectady_muni,
-    },
-    "stadium": {
-        "url": "https://foreupsoftware.com/index.php/booking/index/3332#teetimes",
-        "func": playwright_logic.book_stadium,
-    },
-    "town_of_colonie": {
-        "url": "https://www.townofcolonie.gov/departments/parksandrec/golfcourse/book-teetime",
-        "func": playwright_logic.book_town_of_colonie,
-    },
-    "van_patten": {
-        "url": "https://foreupsoftware.com/index.php/booking/19765/2544",
-        "func": playwright_logic.book_van_patten,
-    },
-    "saratoga_spa": {
-        "url": "https://foreupsoftware.com/index.php/booking/21684/8618#/teetimes",
-        "func": playwright_logic.book_saratoga_spa,
-    }
-}
-
-# ---------------------------------------------------------------------------
-# MOCK OBJECTS & EXECUTION
-# ---------------------------------------------------------------------------
 
 class MockBooking:
     """Wraps data to act like the object expected by playwright_logic"""
     def __init__(self, desired_date, earliest, latest, players, release_time=None):
         self.desired_date = desired_date
-        self.earliest_time = datetime.strptime(earliest, '%H:%M:%S').time()
-        self.latest_time = datetime.strptime(latest, '%H:%M:%S').time()
+        self.earliest_time = datetime.strptime(earliest, '%H:%M').time()
+        self.latest_time = datetime.strptime(latest, '%H:%M').time()
         self.players = players
         self.release_time = release_time
 
-def run_replication():
-    """Runs the replication using the configured settings and dispatch table."""
-    print(f"--- REPLICATING JOB ---")
-    print(f"Course:   {COURSE_TO_TEST}")
-    print(f"Date:     {TARGET_DATE}")
-    print(f"Window:   {EARLIEST_TIME} - {LATEST_TIME}")
-    print(f"Players:  {PLAYERS}")
-    print(f"Dry Run:  {DRY_RUN}")
-    print(f"Headless: {HEADLESS}")
-    print(f"-----------------------\n")
 
-    booking = MockBooking(TARGET_DATE, EARLIEST_TIME, LATEST_TIME, PLAYERS)
-    
-    handler = COURSE_HANDLERS.get(COURSE_TO_TEST)
+def run_replication(course_name, target_date, earliest, latest, players, dry_run, headless, email, password):
+    """Runs the replication using the configured settings."""
+    handler = get_handler(course_name)
     if not handler:
-        print(f"ERROR: Unknown course '{COURSE_TO_TEST}'. Check COURSE_HANDLERS dictionary.")
-        return
+        print(f"\n❌ ERROR: Unknown course '{course_name}'.")
+        print(f"Available courses: {', '.join(list_courses())}")
+        sys.exit(1)
 
+    print(f"\n{'='*50}")
+    print(f"  PinSeeker Local Test")
+    print(f"{'='*50}")
+    print(f"  Course:    {course_name}")
+    print(f"  Date:      {target_date}")
+    print(f"  Window:    {earliest} - {latest}")
+    print(f"  Players:   {players}")
+    print(f"  Dry Run:   {dry_run}")
+    print(f"  Headless:  {headless}")
+    print(f"  Email:     {email}")
+    print(f"  Function:  {handler['func'].__name__}")
+    print(f"{'='*50}\n")
+
+    booking = MockBooking(target_date, earliest, latest, players)
     url = handler["url"]
     book_func = handler["func"]
 
     try:
-        result = book_func(url, booking, EMAIL, PASSWORD, dry_run=DRY_RUN, headless=HEADLESS)
-        print(f"[SUCCESS] Result: {result}")
-
+        result = asyncio.run(book_func(url, booking, email, password, dry_run=dry_run, headless=headless))
+        print(f"\n✅ [SUCCESS] Result: {result}")
     except Exception:
-        print(f"[FAILED] An error occurred while running the script for {COURSE_TO_TEST}:")
+        print(f"\n❌ [FAILED] An error occurred:")
         traceback.print_exc()
+        sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="PinSeeker Local Test Harness — test scraper logic without Firestore",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python replicate_playwright.py --list
+  python replicate_playwright.py --course "orchard creek" --date 2026-07-25
+  python replicate_playwright.py --course "fairways" --date 2026-07-25 --headless false --live
+        """
+    )
+    parser.add_argument('--list', action='store_true', help='List all available courses')
+    parser.add_argument('--course', type=str, help='Course name (e.g., "orchard creek", "fairways")')
+    parser.add_argument('--date', type=str, help='Target play date (YYYY-MM-DD). Defaults to tomorrow.')
+    parser.add_argument('--earliest', type=str, default='07:00', help='Earliest tee time (HH:MM). Default: 07:00')
+    parser.add_argument('--latest', type=str, default='20:00', help='Latest tee time (HH:MM). Default: 20:00')
+    parser.add_argument('--players', type=int, default=4, help='Number of players. Default: 4')
+    parser.add_argument('--live', action='store_true', help='Actually attempt the booking (disables dry run)')
+    parser.add_argument('--headless', type=str, default='true', help='Run browser headless (true/false). Default: true')
+    parser.add_argument('--email', type=str, help='Course login email (overrides .env COURSE_EMAIL)')
+    parser.add_argument('--password', type=str, help='Course login password (overrides .env COURSE_PASSWORD)')
+
+    args = parser.parse_args()
+
+    # List mode
+    if args.list:
+        print("\nAvailable courses:")
+        for name in list_courses():
+            print(f"  • {name}")
+        print()
+        return
+
+    # Validate required args
+    if not args.course:
+        parser.error("--course is required (or use --list to see available courses)")
+
+    # Parse date
+    if args.date:
+        target_date = date.fromisoformat(args.date)
+    else:
+        target_date = date.today() + timedelta(days=1)
+        print(f"No --date specified. Defaulting to tomorrow: {target_date}")
+
+    # Parse headless
+    headless = args.headless.lower() in ('true', '1', 'yes')
+
+    # Resolve credentials: CLI args > .env > error
+    email = args.email or os.getenv('COURSE_EMAIL', '')
+    password = args.password or os.getenv('COURSE_PASSWORD', '')
+
+    if not email or not password:
+        print("\n⚠️  No credentials provided.")
+        print("   Set COURSE_EMAIL and COURSE_PASSWORD in backend/.env,")
+        print("   or pass --email and --password on the command line.")
+        sys.exit(1)
+
+    dry_run = not args.live
+
+    run_replication(
+        course_name=args.course,
+        target_date=target_date,
+        earliest=args.earliest,
+        latest=args.latest,
+        players=args.players,
+        dry_run=dry_run,
+        headless=headless,
+        email=email,
+        password=password,
+    )
+
 
 if __name__ == "__main__":
-    run_replication()
+    main()

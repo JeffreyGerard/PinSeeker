@@ -1,5 +1,5 @@
 # Build Stage for React Frontend
-FROM node:18-alpine AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 ARG VITE_FIREBASE_API_KEY
 ARG VITE_FIREBASE_AUTH_DOMAIN
@@ -23,7 +23,7 @@ COPY frontend/ .
 RUN npm run build
 
 # Production Stage for FastAPI
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 
 # Install system dependencies needed for Playwright/Chromium and Tailscale
 RUN apt-get update && apt-get install -y \
@@ -62,6 +62,12 @@ COPY --from=frontend-builder /frontend/dist ./dist
 # Copy the startup script and make it executable
 COPY start.sh .
 RUN chmod +x start.sh
+
+# Run as non-root user for security
+# Note: Tailscale userspace mode does not require root
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app
+USER appuser
 
 # Run the application via the startup script
 CMD ["./start.sh"]

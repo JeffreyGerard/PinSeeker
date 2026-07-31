@@ -12,6 +12,7 @@ from firebase_admin import credentials, auth
 import threading
 import subprocess
 import sys
+from utils import encrypt_password
 
 # Initialize FastAPI
 app = FastAPI(title="PinSeeker API")
@@ -94,7 +95,7 @@ except ValueError:
 
 # Initialize Firestore
 try:
-    db = firestore.Client(project=os.getenv('GOOGLE_CLOUD_PROJECT', 'jeff-gcp-project'))
+    db = firestore.Client()
 except Exception as e:
     print(f"Warning: Failed to initialize Firestore. {e}")
     db = None
@@ -155,6 +156,15 @@ async def create_booking(booking_request: BookingRequest, request: Request):
     job_id = str(uuid.uuid4())
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    # Encrypt the course password before storing in Firestore
+    encrypted_password = booking_request.course_password
+    if booking_request.course_password:
+        try:
+            encrypted_password = encrypt_password(booking_request.course_password)
+        except ValueError:
+            # ENCRYPTION_KEY not set — log warning but don't block the request
+            print("WARNING: ENCRYPTION_KEY not set. Storing course_password in plaintext.")
+
     job_data = {
         "id": job_id,
         "status": "PENDING",
@@ -166,7 +176,8 @@ async def create_booking(booking_request: BookingRequest, request: Request):
         "players": booking_request.players,
         "release_time": booking_request.release_time,
         "course_email": booking_request.course_email,
-        "course_password": booking_request.course_password,
+        "course_password": encrypted_password,
+        "password_encrypted": bool(booking_request.course_password and encrypted_password != booking_request.course_password),
         "created_at": now,
         "updated_at": now,
         "uid": user["uid"]
@@ -223,6 +234,64 @@ async def cancel_booking(job_id: str, request: Request):
         print(f"Firestore update error: {e}")
         raise HTTPException(status_code=500, detail="Failed to cancel booking request")
 
+@app.delete("/api/bookings/{job_id}")
+async def delete_booking(job_id: str, request: Request):
+    user = verify_firebase_token(request)
+    
+    if not db:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+        
+    doc_ref = db.collection('tee_time_jobs').document(job_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        raise HTTPException(status_code=404, detail="Booking request not found")
+        
+    job_data = doc.to_dict()
+    
+    # Verify user ownership of this job
+    if job_data.get("uid") != user["uid"]:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this booking request")
+        
+    try:
+        doc_ref.delete()
+        return {"status": "success", "message": "Booking request successfully deleted."}
+    except Exception as e:
+        print(f"Firestore delete error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete booking request")
+
+class BatchDeleteRequest(BaseModel):
+    job_ids: list[str]
+
+@app.post("/api/bookings/batch-delete")
+async def batch_delete_bookings(req: BatchDeleteRequest, request: Request):
+    user = verify_firebase_token(request)
+    
+    if not db:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+        
+    batch = db.batch()
+    deleted_count = 0
+    
+    for job_id in req.job_ids:
+        doc_ref = db.collection('tee_time_jobs').document(job_id)
+        doc = doc_ref.get()
+        if doc.exists:
+            job_data = doc.to_dict()
+            if job_data.get("uid") == user["uid"]:
+                batch.delete(doc_ref)
+                deleted_count += 1
+                
+    if deleted_count > 0:
+        try:
+            batch.commit()
+            return {"status": "success", "message": f"Successfully deleted {deleted_count} booking requests."}
+        except Exception as e:
+            print(f"Firestore batch delete error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to delete booking requests")
+    else:
+        return {"status": "success", "message": "No bookings were deleted."}
+
 class ExecuteJobRequest(BaseModel):
     job_id: str
 
@@ -243,12 +312,11 @@ async def execute_job(req: ExecuteJobRequest):
     # Import execute_booking from worker.py
     # We do this inside the function to avoid circular imports or early initialization issues
     from worker import execute_booking
-    from starlette.concurrency import run_in_threadpool
     
     # We run it synchronously here so Cloud Run stays active until it finishes.
     # Cloud Tasks will wait for the response.
     try:
-        await run_in_threadpool(execute_booking, req.job_id, job_data)
+        await execute_booking(req.job_id, job_data)
         return {"status": "success", "job_id": req.job_id}
     except Exception as e:
         print(f"Execution error: {e}")
@@ -293,12 +361,65 @@ async def trigger_cron():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/test-proxy")
+def test_proxy():
+    """Diagnostic endpoint to verify if the Cloud Run container can route traffic through Tailscale SOCKS5 proxy."""
+    from playwright.sync_api import sync_playwright
+    from playwright_logic import _new_stealth_context
+    from playwright_stealth import Stealth
+    import json
+    
+    proxy_url = os.getenv("PLAYWRIGHT_PROXY_SERVER")
+    
+    try:
+        with Stealth().use_sync(sync_playwright()) as p:
+            browser, context = _new_stealth_context(p, headless=True)
+            page = context.new_page()
+            try:
+                page.goto("https://ipinfo.io/json", wait_until="networkidle", timeout=15000)
+                body = page.evaluate("() => document.body.innerText")
+                # Parse the JSON response from ipinfo.io
+                try:
+                    ip_data = json.loads(body)
+                except Exception:
+                    ip_data = {"raw_text": body}
+                return {
+                    "status": "success", 
+                    "proxy": proxy_url if proxy_url else "None (Direct Connection)", 
+                    "resolved_ip_data": ip_data
+                }
+            finally:
+                browser.close()
+    except Exception as e:
+        return {
+            "status": "failed", 
+            "proxy": proxy_url if proxy_url else "None (Direct Connection)", 
+            "error": str(e)
+        }
+
+@app.get("/api/test-tailscale")
+def test_tailscale():
+    """Diagnostic endpoint to inspect the Tailscale network status and exit node peer connectivity."""
+    import subprocess
+    try:
+        status_res = subprocess.run(["tailscale", "status"], capture_output=True, text=True, timeout=5)
+        # Check tailscale exit-node status or ping exit node
+        ping_res = subprocess.run(["tailscale", "ping", "--timeout=2s", os.getenv("TAILSCALE_EXIT_NODE", "100.113.62.1")], capture_output=True, text=True, timeout=5)
+        return {
+            "status": "success",
+            "exit_node": os.getenv("TAILSCALE_EXIT_NODE"),
+            "tailscale_status": status_res.stdout.splitlines(),
+            "tailscale_ping": ping_res.stdout.splitlines()
+        }
+    except Exception as e:
+        return {"status": "failed", "error": str(e)}
+
 # Exception handler for serving the React SPA (catch-all for frontend routing)
 @app.exception_handler(404)
 async def custom_404_handler(request: Request, exc: HTTPException):
     # If the user is requesting an API route that doesn't exist, return 404 JSON
     if request.url.path.startswith("/api/"):
-        return JSONResponse(status_code=404, content={"message": "Not Found"})
+        return JSONResponse(status_code=404, content={"detail": exc.detail})
     
     # Otherwise, assume it's a frontend route and let React handle it
     # We serve the index.html from the dist folder
@@ -307,7 +428,7 @@ async def custom_404_handler(request: Request, exc: HTTPException):
             content = f.read()
         return HTMLResponse(content=content, status_code=200)
     except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"message": "Frontend build not found. Run 'npm run build' in the frontend directory."})
+        return JSONResponse(status_code=404, content={"detail": "Frontend build not found. Run 'npm run build' in the frontend directory."})
 
 # Mount the static 'dist' directory (contains assets like CSS/JS from Vite build)
 # This must come AFTER the API routes so it doesn't intercept them.
