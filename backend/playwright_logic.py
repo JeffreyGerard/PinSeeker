@@ -1,7 +1,6 @@
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 import asyncio
 from playwright_stealth import Stealth
-from playwright_stealth import Stealth
 from datetime import datetime, timezone
 import time
 import re
@@ -257,30 +256,43 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
             logging.info("Searching for tee time between %s and %s.", booking.earliest_time, booking.latest_time)
             earliest = parse_time(booking.desired_date, booking.earliest_time)
             latest = parse_time(booking.desired_date, booking.latest_time)
-            
-            all_buttons = await page.locator('button, mat-card, .teetime-card, [class*="teetime"]').filter(has_text=re.compile(r'\d{1,2}:\d{2}', re.I)).all()
-            booking_element = None
+
+            # Extract all tee time strings atomically in a single JS call to avoid
+            # stale element references caused by Angular re-rendering the grid mid-iteration.
+            raw_times = await page.evaluate('''
+                () => {
+                    const els = document.querySelectorAll('button, mat-card, .teetime-card, [class*="teetime"]');
+                    const results = [];
+                    els.forEach((el, idx) => {
+                        const txt = el.textContent || '';
+                        const m = txt.match(/(\\d{1,2}:\\d{2})\\s*([AP])\\s*M?/i);
+                        if (m) results.push({ index: idx, time: m[1], ampm: m[2].toUpperCase() + 'M', text: txt.trim() });
+                    });
+                    return results;
+                }
+            ''')
+
+            booking_index = None
             best_time_str = ''
 
-            for btn in all_buttons:
-                txt = (await btn.inner_text()).strip()
-                m = re.search(r'(\d{1,2}:\d{2})\s*([AP])\s*M?', txt, re.IGNORECASE)
-                if m:
-                    time_part = m.group(1)
-                    ampm = m.group(2).upper() + "M"
-                    ts = f"{time_part}{ampm}"
-                    try:
-                        avail = datetime.strptime(f"{booking.desired_date.strftime('%Y-%m-%d')} {ts}", '%Y-%m-%d %I:%M%p')
-                        if earliest <= avail <= latest:
-                            booking_element = btn
-                            best_time_str = ts
-                            logging.info("Found matching tee time: %s", best_time_str)
-                            break
-                    except ValueError:
-                        continue
+            date_str = booking.desired_date.strftime('%Y-%m-%d')
+            for entry in raw_times:
+                ts = f"{entry['time']}{entry['ampm']}"
+                try:
+                    avail = datetime.strptime(f"{date_str} {ts}", '%Y-%m-%d %I:%M%p')
+                    if earliest <= avail <= latest:
+                        booking_index = entry['index']
+                        best_time_str = ts
+                        logging.info("Found matching tee time: %s (DOM index %d)", best_time_str, booking_index)
+                        break
+                except ValueError:
+                    continue
 
-            if not booking_element:
+            if booking_index is None:
                 raise Exception(f'No tee time found between {booking.earliest_time} and {booking.latest_time}')
+
+            # Re-locate the element fresh from the DOM right before clicking
+            booking_element = page.locator('button, mat-card, .teetime-card, [class*="teetime"]').nth(booking_index)
 
             if dry_run:
                 return f'Dry run success at {best_time_str}'
@@ -357,15 +369,24 @@ async def book_cps_golf(url, booking, email, password, dry_run=False, headless=T
                     await page.wait_for_load_state('domcontentloaded', timeout=20000)
                 except: pass
                 
-                # Verify success STRICTLY
-                success_locator = page.locator('text=Success, text=Confirmed, text=Reservation #, .confirmation-number, .reservation-details, .booking-id')
+                # Verify success — check for 'Return to Tee Times' button, known
+                # confirmation text patterns, or a URL change away from checkout.
                 return_btn = page.get_by_role('button', name='Return to Tee Times')
-                
+                success_text = page.locator(
+                    '.confirmation-number, .reservation-details, .booking-id'
+                ).or_(
+                    page.get_by_text('Reservation #', exact=False)
+                ).or_(
+                    page.get_by_text('Confirmed', exact=False)
+                ).or_(
+                    page.get_by_text('Success', exact=False)
+                ).first
+
                 try:
                     if await return_btn.is_visible(timeout=15000):
                         logging.info("Booking confirmation detected. Clicking 'Return to Tee Times'.")
                         await return_btn.click(timeout=5000)
-                    elif await success_locator.first.is_visible(timeout=10000):
+                    elif await success_text.is_visible(timeout=10000):
                         logging.info("Booking confirmation text detected on page.")
                     else:
                         raise PlaywrightTimeoutError("No success indicators found.")
@@ -604,12 +625,35 @@ async def book_via_foreup_software(url, booking, email, password, dry_run=False,
                     except Exception as e:
                         logging.warning(f"Could not handle 'Pay At Facility': {e}")
                 
-                # Wait briefly for the action to process
+                # Wait for confirmation — URL change, known text, or confirmation element
                 await page.wait_for_timeout(3000)
+                current_url = page.url.lower()
+                confirmed = False
+
+                if any(k in current_url for k in ['confirm', 'success', 'reservation', 'booking']):
+                    logging.info("ForeUp: Confirmation URL detected: %s", page.url)
+                    confirmed = True
+                else:
+                    try:
+                        conf_locator = page.locator(
+                            '.booking-confirmation, .confirmation-number, .reservation-id'
+                        ).or_(
+                            page.get_by_text('Reservation #', exact=False)
+                        ).or_(
+                            page.get_by_text('Confirmed', exact=False)
+                        ).first
+                        if await conf_locator.is_visible(timeout=10000):
+                            logging.info("ForeUp: Confirmation text detected on page.")
+                            confirmed = True
+                    except Exception:
+                        pass
+
+                if not confirmed:
+                    raise Exception(f"ForeUp booking completed but no confirmation found. URL: {page.url}")
             else:
                 logging.info("DRY RUN: Skipping final click.")
-            
-            return f'Success! Attempted booking for {best_time_str}.'
+
+            return f'Success! Booked {best_time_str}.'
 
             
 
@@ -646,7 +690,9 @@ async def book_stadium(url, booking, email, password, dry_run=False, headless=Tr
     return await book_via_foreup_index(url, booking_class_id=14558, booking=booking, email=email, password=password, dry_run=dry_run, headless=headless)
 
 async def book_van_patten(url, booking, email, password, dry_run=False, headless=True):
-    return await book_via_foreup_index(url, booking_class_id=None, booking=booking, email=email, password=password, dry_run=dry_run, headless=headless)
+    # Van Patten does not use a booking class ID — route via foreup_software directly
+    # to avoid appending `bc=None` to the URL.
+    return await book_via_foreup_software(url, booking, email=email, password=password, dry_run=dry_run, headless=headless)
 
 async def book_saratoga_spa(url, booking, email, password, dry_run=False, headless=True):
     return await book_via_foreup_software(url, booking, email, password, dry_run=dry_run, headless=headless)
